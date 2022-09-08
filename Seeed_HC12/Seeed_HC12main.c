@@ -128,12 +128,13 @@ void HC12_Init(uint32_t baud){
 
 void SysTick_Handler_1(void){
   uint8_t in;
-  LEDOUT ^= 0x01;       // toggle P1.0
-  LEDOUT ^= 0x01;       // toggle P1.0
+  
   Time = Time + 1;
   uint8_t ThisInput = LaunchPad_Input();   // either button
   if(ThisInput){
     if((Time%100) == 0){ // 1 Hz
+      LEDOUT ^= 0x01;       // toggle P1.0
+      LEDOUT ^= 0x01;       // toggle P1.0
       HC12data = HC12data^0x01; // toggle '0' to '1'
       if(HC12data == 0x31){
         Message = 1; // S1
@@ -143,10 +144,13 @@ void SysTick_Handler_1(void){
         Flag = 1;    // signal
       }
       UART1_OutChar(HC12data);
+      LEDOUT ^= 0x01;       // toggle P1.0
     }
   }
   in = UART1_InCharNonBlock();
   if(in){
+    LEDOUT ^= 0x01;       // toggle P1.0
+    LEDOUT ^= 0x01;       // toggle P1.0
     switch(in){
       case '0':
         Message = 2; // R0
@@ -159,8 +163,8 @@ void SysTick_Handler_1(void){
         LaunchPad_Output(BLUE);
         break;
     }
+    LEDOUT ^= 0x01;       // toggle P1.0
   }
-  LEDOUT ^= 0x01;       // toggle P1.0
 }
 
 /**
