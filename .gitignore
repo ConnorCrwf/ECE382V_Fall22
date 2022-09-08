@@ -365,3 +365,17 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+
+# Extra files and directories on Daniel's PC
+.jxbrowser.userdata/
+cc3100-sdk/
+documentation/
+driverlib/
+utils/
+DoxyfileEmbeddedIoT
+EmbeddedIoT_documentation.html
+license.txt
+ReadMe.txt
+TExaSdisplay.exe
+TExaSdisplayLicense.txt
+/.metadata/
