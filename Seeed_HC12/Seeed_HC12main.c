@@ -65,7 +65,9 @@ policies, either expressed or implied, of the FreeBSD Project.
 //   SDA    SSD1306 SDA <> P6.4 I2C data SDA_S
 //   SCL    SSD1306 SCL <- P6.5 I2C clock SCL_S with 1.5k pullup to 3.3V
 
+
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include "msp.h"
@@ -76,7 +78,11 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "..\inc\UART0.h"
 #include "..\inc\UART1.h"
 #include "..\inc\SSD1306_I2C.h"
-volatile uint32_t Time,MainCount;
+#include "..\inc\TimerA0.h"
+#include "Seeed_HC12main.h"
+
+
+volatile uint32_t Time, MainCount;
 #define LEDOUT (*((volatile uint8_t *)(0x42098040)))
 // P3->OUT is 8-bit port at 0x4000.4C22
 // I/O address be 0x4000.0000+n, and let b represent the bit 0 to 7.
@@ -126,6 +132,52 @@ void HC12_Init(uint32_t baud){
   printf("\nRF_XMT initialization done\n");
 }
 
+
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+#define trampoline  2
+#define MY_ID       3
+#define DEST_ID     3
+
+//********SysTick_Handler*****************
+// ISR for SysTick timer, runs every 10ms.
+// Trampoline for selecting handler.
+// Inputs: none
+// Outputs: none
+void SysTick_Handler(void) {
+  switch (trampoline) {
+    case 0:
+      SysTick_Handler_1();
+      break;
+    case 1:
+      SysTick_Handler_5E();
+      break;
+    case 2:
+      SysTick_Handler_5F();
+      break;
+  }
+}
+
+//********Trampoline for selecting main*****************
+void main() {
+  switch (trampoline) {
+    case 0:
+      main_1();
+      break;
+    case 1:
+      main_5E();
+      break;
+    case 2:
+      main_5F();
+      break;
+  }
+}
+
+
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
 void SysTick_Handler_1(void){
   uint8_t in;
 
@@ -227,8 +279,9 @@ void main_1(void){int num=0;
   }
 }
 
-
-// **************************************************
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
 uint8_t KnownSequence[] = {'A', 'B', 'C', 'D', 'E'};
 uint8_t InputSequence[5];
 
@@ -361,53 +414,106 @@ void main_5E(void) {
 }
 
 
-// **************************************************
-uint8_t deviceID = 0;
-uint8_t numDevices = 1;
-uint8_t SendFlag = 0;
-struct MessageProtocol{
-  uint8_t header;
-  uint8_t address;
-  uint8_t length;
-  uint8_t data[32];
-  uint8_t error;
-};
-struct MessageProtocol OutputPacket;
-struct MessageProtocol InputPacket;
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+uint32_t TIMER_FREQ = 24000000;
+uint32_t MICROSEC_UNITS = 2;
+uint32_t INTERRUPT_RATE_TIMER = 9600;   // 9.6kHz
+message_t OutPacket;
 
 
 //********SysTick_Handler*****************
 // ISR for SysTick timer.
-// Checks UART1 for communication through HC12 wireless module.
 // Sends data when button is pressed.
 // Inputs: none
 // Outputs: none
 void SysTick_Handler_5F(void) {
-  uint8_t in;
-
-  LEDOUT ^= 0x01;       // toggle P1.0
-  LEDOUT ^= 0x01;       // toggle P1.0
   Time = Time + 1;
 
-  // Check for system initialization complete
-  if (numDevices >= 3) {
-    // Send data on button press
-    //TODO Check if this works or needs denouncing (counter ~30) before proceeding.
-    uint8_t ThisInput = LaunchPad_Input();   // either button
-    if (ThisInput) {
-      if (!SendFlag) {    // Send a single message
-        SendFlag = 1;
-        // SendPacket(OutputPacket);
+  // Send data on button press
+  uint8_t ThisInput = LaunchPad_Input();   // either button
+  if (ThisInput) {
+    if ((Time % 100) == 0) {  // 1 Hz at a time
+      // Only send one packet
+      if (G_UNSENT_BYTES > 0) {   // Message already in transit
+        return;
+      }
+      else {
+        G_UNSENT_BYTES = sizeof(OutPacket);  // Length of data + header info
+        memcpy(G_SEND_BUFF, &OutPacket, G_UNSENT_BYTES); 
+        G_SEND_PTR = G_SEND_BUFF;
+      }
+    }
+  }
+}
+
+//********PeriodicTask*****************
+// ISR for TimerA0.
+// Checks UART1 for communication through HC12 wireless module.
+// Runs at 9.6KHz.
+// Inputs: none
+// Outputs: none
+void PeriodicTask_5F(void) {
+  uint8_t in, len, error;
+
+  // Check for outgoing data that needs to be sent out
+  if (G_UNSENT_BYTES > 0) {
+    LaunchPad_Output(BLUE);
+
+    UART1_OutChar(*G_SEND_PTR);
+    G_SEND_PTR++;
+    G_UNSENT_BYTES--;
+  }
+
+  // Check UART1 for incoming data
+  if (UART1_InStatus()) {
+    LaunchPad_Output(GREEN);
+
+    in = UART1_InChar();
+    // Check recv buffer for incoming data that needs to be received
+    if (G_UNRECV_BYTES > 0) {
+      *G_RECV_PTR = in;
+      G_UNRECV_BYTES--;
+
+      // Once recv buffer reaches 0, check for error
+      if (G_UNRECV_BYTES == 0) {
+        // Calculate error from msg
+        error = G_RECV_BUFF[0];
+        for (int i = 1; i < len; i++) {
+          error = error ^ G_RECV_BUFF[i];
+        }
+        // Compare to transmitted error
+        if (error != in) {
+          LaunchPad_Output(RED);
+        }
       }
     }
     else {
-      SendFlag = 0;   // Reset flag when button is released
+      // Parse incoming message and set recv buffer
+      if (in == HEADER) {       // Check correct header
+        in = UART1_InChar();
+        if (in == MY_ID)  {     // Check message is for me
+          len = UART1_InChar();    // Retrieve length
+          G_UNRECV_BYTES = sizeof(message_t) - 3;   // Size of message - header - address
+          G_RECV_PTR = G_RECV_BUFF;   // Pointer to start of buffer
+        }
+      }
     }
-
-    // Receive data and perform error checking
-    in = UART1_InCharNonBlock();
-    if (in) {
-      // ReceivePacket(in);
+  }
+  // Check if incoming data was lost
+  else {
+    // Recv buffer is not empty, lost some data
+    if (G_UNRECV_BYTES > 0) {
+      LaunchPad_Output(RED);
+      // Timeout for 1 sec
+      if (++RX_TIMEOUT_CNT == RX_TIMEOUT) {
+        G_UNRECV_BYTES = 0;   // Reset buffer
+      }
+    }
+    else {
+      RX_TIMEOUT_CNT = 0;
+      LaunchPad_Output(0);
     }
   }
 }
@@ -417,13 +523,11 @@ void SysTick_Handler_5F(void) {
 // Inputs: none
 // Outputs: none
 void main_5F(void) {
-  uint8_t i = 1, error;
-
   DisableInterrupts();  // Prevent interrupts during initialization
 
   // Standard initialization sequence
   Clock_Init48MHz();        // running on crystal
-  SysTick_Init(480000,2);   // set up SysTick for 100 Hz interrupts
+  SysTick_Init(480000, 1);  // SysTick interrupts at 1KHz, priority 1
   LaunchPad_Init();         // P1.0 is red LED on LaunchPad
   UART0_Initprintf();       // serial port to PC for debugging
   SSD1306_Init(SSD1306_SWITCHCAPVCC);
@@ -442,98 +546,28 @@ void main_5F(void) {
   SSD1306_OutString(" RF_XMT init done\n");
   SSD1306_OutString("\nHold switch for 1s\n");
 
+  TimerA0_Init(&PeriodicTask_5F, 
+    (TIMER_FREQ / MICROSEC_UNITS) / INTERRUPT_RATE_TIMER);   // TimerA0 interrupts at 9.6KHz, priority 2
+  //TODO crcInit();
+
   // Create output message
-  OutputPacket.header = '?';    // Unlikely any other team chose this symbol
-  OutputPacket.address = 2;
-  OutputPacket.length = 3;
-  OutputPacket.data[0] = 'A';
-  OutputPacket.data[1] = 'B';
-  OutputPacket.data[2] = 'C';
-  i = 1;
-  error = OutputPacket.data[0];
-  while (i < OutputPacket.length) {
-    error = error ^ OutputPacket.data[i];
+  OutPacket.header = HEADER;
+  OutPacket.address = DEST_ID;
+  OutPacket.length = sizeof(OutMessage);
+  memcpy(OutPacket.data, OutMessage, OutPacket.length);
+  uint8_t i = 1, error;  // Calculate error
+  error = OutMessage[0];
+  while (i < OutPacket.length) {
+    error = error ^ OutPacket.data[i];
     i++;
   }
-  OutputPacket.error = error;   // Bitwise XOR of data sequence
+  OutPacket.error = error;
 
   EnableInterrupts();
 
   // Application, loop forever
   while (1) {
-    //TODO Make sure initialization sequence makes sense.
-    // Initialization step until three devices are online.
-    if (numDevices < 3) {
-      // Check for device ID
-      if (deviceID) {
-        LaunchPad_Output(GREEN);    // LED Green
-        i = UART1_InCharNonBlock();
-        // Check for new device online
-        if (i == 0) {
-          numDevices++;
-          UART1_OutChar(numDevices);
-        }
-      }
-      else {
-        LaunchPad_Output(0);        // LED Off
-        UART1_OutChar(deviceID);    // Sends 0
-        i = UART1_InChar();
-        if (i) {    // Received nonzero, previous device(s) online
-          deviceID = i;
-          numDevices = i;
-        }
-        else {      // Received 0, I'm the first device
-          deviceID = 1;
-          numDevices++;
-          UART1_OutChar(numDevices);
-        }
-      }
-    }
-
-    // Three devices are online, continue with message transmission.
-    else {
-      
-    }
+    WaitForInterrupt();
+    MainCount++;
   }
 }
-
-
-int trampoline = 2;
-
-//********SysTick_Handler*****************
-// ISR for SysTick timer, runs every 10ms.
-// Trampoline for selecting handler.
-// Inputs: none
-// Outputs: none
-void SysTick_Handler(void) {
-  switch (trampoline) {
-    case 0:
-      SysTick_Handler_1();
-      break;
-    case 1:
-      SysTick_Handler_5E();
-      break;
-    case 2:
-      SysTick_Handler_5F();
-      break;
-  }
-}
-
-//********Trampoline for selecting main*****************
-void main() {
-  switch (trampoline) {
-    case 0:
-      main_1();
-      break;
-    case 1:
-      main_5E();
-      break;
-    case 2:
-      main_5F();
-      break;
-  }
-}
-
-
-//TODO *** Add profiling for latency measurement.
-// Look at Pete's Code to implement the message protocol.
