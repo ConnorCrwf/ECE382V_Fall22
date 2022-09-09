@@ -137,9 +137,8 @@ void HC12_Init(uint32_t baud){
 // ******************************************************************************
 // ******************************************************************************
 #define trampoline  2
-#define MY_ID       3
+#define MY_ID       1
 #define DEST_ID     3
-
 //********SysTick_Handler*****************
 // ISR for SysTick timer, runs every 10ms.
 // Trampoline for selecting handler.
@@ -468,11 +467,10 @@ void PeriodicTask_5F(void) {
 
   // Check UART1 for incoming data
   if (UART1_InStatus()) {
-    LaunchPad_Output(GREEN);
-
     in = UART1_InChar();
     // Check recv buffer for incoming data that needs to be received
     if (G_UNRECV_BYTES > 0) {
+      LaunchPad_Output(GREEN);
       *G_RECV_PTR = in;
       G_UNRECV_BYTES--;
 
@@ -488,6 +486,8 @@ void PeriodicTask_5F(void) {
           LaunchPad_Output(RED);
         }
       }
+
+      G_RECV_PTR++;
     }
     else {
       // Parse incoming message and set recv buffer
@@ -497,6 +497,9 @@ void PeriodicTask_5F(void) {
           len = UART1_InChar();    // Retrieve length
           G_UNRECV_BYTES = sizeof(message_t) - 3;   // Size of message - header - address
           G_RECV_PTR = G_RECV_BUFF;   // Pointer to start of buffer
+        }
+        else {
+          while (UART1_InCharNonBlock()) {} // Clear message
         }
       }
     }
@@ -511,7 +514,7 @@ void PeriodicTask_5F(void) {
         G_UNRECV_BYTES = 0;   // Reset buffer
       }
     }
-    else {
+    else { //TODO This logic is not 100% correct because this should not happen when we are sending.
       RX_TIMEOUT_CNT = 0;
       LaunchPad_Output(0);
     }
