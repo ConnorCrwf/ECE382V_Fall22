@@ -1,11 +1,13 @@
+
 // SIM7600main.c
 // Runs on either MSP432
 // Starter code for Lab5 ECE382V Technology for IoT
 // This version operates with the RTOS built in ECE445M Lab 3
 // Data streamed via SIM7600 GSM SMS module to phone
+// The phone number for this Embedded IoT object is 737-529-6744
 
 // Pranav Rama, Daniel Valvano, and Jonathan Valvano
-// August 25, 2022
+// Sept 14, 2022
 
 /*
  Copyright 2022 by Jonathan W. Valvano, valvano@mail.utexas.edu
@@ -21,251 +23,282 @@
  */
 /* Hardware
  * One MSP-EXP432P401R LaunchPad
- * One COM.LTE 4G MODULE SIM7600G
- * One BOOSTXL-EDUMKII BoosterPack
+ * One COM.LTE 4G MODULE SIM7600G, Digikey 2221-M031-A-ND
+ * One BP-BASSENSORSMKII BoosterPack
  */
+// built-in LED1 connected to P1.0
+// P1.0, P2.0 are an output to profiling scope/logic analyzer
+// Current sense amplifier connect to ADC A13, P4.0
+
+// SIM7600G pin connection
+// TX      , MSP432 UCA2RXD P3.2
+// RX      , MSP432 UCA2TXD P3.3
+// 5V      , LaunchPad 5V
+// GND     , LaunchPad GND
+//***********BP-BASSENSORSMKII****************
+// P4.1 INT1      BMI160 IMU
+// P5.0 INT2      BMI160 IMU
+// P4.3 HDC_V+    HDC2080
+// P6.1 HDC_INT   HDC2080
+// P4.5 OPT_V+    OPT3001 VDD   pin 1 <- P4.5 power to sensor
+// P6.4 SDA       OPT3001 SDA   pin 6 <> P6.4 I2C data SDA
+// P6.5 SCL       OPT3001 SCL   pin 4 <- P6.5 I2C clock SCL
+// P4.2 OPT_INT   OPT3001 INT   pin 5 -> P4.2 interrupt
+// P4.7 TMP_V+    TMP117 V+    pin 5 <- P4.7 power to sensor
+// P6.4 SDA       TMP117 SDA   pin 6 <> P6.4 I2C data SDA
+// P6.5 SCL       TMP117 SCL   pin 1 <- P6.5 I2C clock SCL
+// P4.4 TMP_ALERT TMP117 ALERT pin 3 -> P4.4 alert
+/*
+<table>
+<caption id="BMI160">BMI160 on BP-BASSENSORSMKII connected to MSP432</caption>
+<tr><th>Signal <th> BMI160       <th> MSP432
+<tr><td>SDO    <td>BMI160 pin 1  <td> 3.3V (I2C address = 0x69)
+<tr><td>ASDx   <td>BMI160 pin 2  <td> P6.4 I2C data SDA_S
+<tr><td>ASCx   <td>BMI160 pin 3  <td> P6.5 I2C clock SCL_S
+<tr><td>INT1   <td>BMI160 pin 4  <td> P4.1 input from the interrupt pin
+<tr><td>VDDIO  <td>BMI160 pin 5  <td> 3.3V
+<tr><td>GNDIO  <td>BMI160 pin 6  <td> ground
+<tr><td>GND    <td>BMI160 pin 7  <td> ground
+<tr><td>VDD    <td>BMI160 pin 8  <td> 3.3V
+<tr><td>INT2   <td>BMI160 pin 9  <td> P5.0
+<tr><td>OCSB   <td>BMI160 pin 10 <td> not connected (unused SPI for slave)
+<tr><td>OSDO   <td>BMI160 pin 11 <td> not connected (unused SPI for slave)
+<tr><td>CSB    <td>BMI160 pin 12 <td> 3.3V (protocol select = I2C)
+<tr><td>SCX    <td>BMI160 pin 13 <td> I2C clock to BMM150 Three-Axis Geomagnetic Sensor slave (I2C address = 0x13)
+<tr><td>SDX    <td>BMI160 pin 14 <td> I2C data to BMM150 Three-Axis Geomagnetic Sensor slave (I2C address = 0x13)
+</table>
+<table>
+<caption id="HDC2080">HDC2080 on BP-BASSENSORSMKII connected to MSP432</caption>
+<tr><th>Signal  <th> HDC2080             <th> MSP432
+<tr><td>GND     <td> ground        pin 2 <td> ground
+<tr><td>HDC_V+  <td> Q2 powers VDD pin 5 <td> P4.3, output 0 to power the sensor
+<tr><td>SDA     <td> HDC2080 SDA   pin 1 <td> P6.4 I2C data SDA
+<tr><td>SCL     <td> HDC2080 SCL   pin 6 <td> P6.5 I2C clock SCL
+<tr><td>HDC_INT <td> HDC2080 DRDY/INT pin 4 <td> P6.1 alert
+</table>
+<table>
+<caption id="OPT3001">OPT3001 on BP-BASSENSORSMKII connected to MSP432</caption>
+<tr><th>Signal    <th> OPT3001             <th>MSP432
+<tr><td>GND       <td> ground              <td> ground
+<tr><td>TMP_V+    <td> OPT3001 V+    pin 5 <td> P4.7 power to sensor
+<tr><td>SDA       <td> OPT3001 SDA   pin 6 <td> P6.4 I2C data SDA
+<tr><td>SCL       <td> OPT3001 SCL   pin 1 <td> P6.5 I2C clock SCL
+<tr><td>TMP_ALERT <td> OPT3001 ALERT pin 3 <td> P4.4 open drain alert
+</table>
+<table>
+<caption id="TMP117">TMP117 on BP-BASSENSORSMKII connected to MSP432</caption>
+<tr><th>Signal    <th> TMP117 <th>MSP432
+<tr><td>GND       <td> ground             <td> ground
+<tr><td>TMP_V+    <td> TMP117 V+    pin 5 <td> P4.7 power to sensor
+<tr><td>SDA       <td> TMP117 SDA   pin 6 <td> P6.4 I2C data SDA
+<tr><td>SCL       <td> TMP117 SCL   pin 1 <td> P6.5 I2C clock SCL
+<tr><td>TMP_ALERT <td> TMP117 ALERT pin 3 <td> P4.4 open drain alert
+</table>
+*/
+// Connect logic analyzer to these bits
+// Task 0 Port 1.0 Output
+// Task 1 Port 2.0 Output
+// Task 2 Port 5.4 Output
+// Task 3 Port 5.5 Output
+// Task 4 Port 3.0 Output
+// Task 5 Port 6.6 Output
+// Task 6 Port 2.3 Output
 #include <stdint.h>
-#include "../inc/BSP.h"
+
 #include "../inc/CortexM.h"
 #include "../inc/Clock.h"
 #include "../inc/UART0.h"
 #include "../inc/Profile.h"
 #include "../inc/SIM7600G.h"
+#include "../inc/LaunchPad.h"
+#include "../inc/ADC14.h"
+#include "../inc/I2CB1.h"
+#include "../inc/HDC2080.h"
+#include "../inc/OPT3001.h"
+#include "../inc/TMP117.h"
+#include "../inc/bmi160.h"
+#include "../inc/bmm150.h"
 #include "os.h"
 #include "msp.h"
 
+#define VALVANO (uint8_t *)"+15129682240"
+#define PRANAV (uint8_t *)"+17138085920"
 
-//---------------- Global variables shared between tasks ----------------
-uint32_t Time;              // elasped time in 100 ms units
-uint32_t Steps;             // number of steps counted
-uint32_t Magnitude;         // will not overflow (3*1,023^2 = 3,139,587)
-                            // Exponentially Weighted Moving Average
-uint32_t EWMA;              // https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
-uint16_t SoundData;         // raw data sampled from the microphone
-int32_t  SoundAvg;
+// test main for phone
+int main(){int32_t n;
+  Clock_Init48MHz();
+  UART0_Initprintf();
+  LaunchPad_Init();
+  UART0_OutString("Embedded IoT SIM7600 project\n\r");
 
-uint32_t SoundRMS;            // Root Mean Square average of most recent sound samples
-uint32_t LightData;           // 100 lux
-int32_t  TemperatureData;     // 0.1C
-uint16_t TemperatureHalfwordData; // 1C
-// semaphores
-int32_t NewData;  // true when new numbers to display on top of LCD
-int32_t LCDmutex; // exclusive access to LCD
-int32_t I2Cmutex; // exclusive access to I2C
-int ReDrawAxes = 0;         // non-zero means redraw axes on next display task
-int Send0Flag=0;
+  SIM7600G_Init(SMS_SIM7600G); // more space on flash in SIM7600G
+//  UART0_OutString("Power down\n\r");
+//  SIM7600G_PowerDown();
+//  Clock_Delay1ms(40000); // give it time to shut down
+//  UART0_OutString("Restarting\n\r");
+//  SIM7600G_Restart(SMS_SIM7600G); // more space on flash in SIM7600G
+  UART0_OutString("***Initialization Complete***\n\r");
+  n = SIM7600G_GetNumSMS();
+//  for(int i=0 ; i<n; i++){
+//    SIM7600G_DeleteSMS(i);
+//  }
+//  while(LaunchPad_Input()==0){};
+//  n = SIM7600G_GetNumSMS();
 
-#define Accelerometer 0
-#define Microphone 1
-#define Temperature 2
-#define Light 2
+  //  UART0_OutString("***Sending text***\n\r");
+//  SIM7600G_SendSMS(PRANAV, "Hello TA SIM7600 from Embedded IoT!");
+//  SIM7600G_SendSMS(VALVANO, "Hello professor from Embedded IoT!");
+//  UART0_OutString("***Sent***\n[r");
+ // while(LaunchPad_Input()==0){};
 
-uint16_t PlotState = Accelerometer;
-//color constants
-#define BGCOLOR     LCD_BLACK
-#define AXISCOLOR   LCD_ORANGE
-#define MAGCOLOR    LCD_YELLOW
-#define EWMACOLOR   LCD_CYAN
-#define SOUNDCOLOR  LCD_CYAN
-#define LIGHTCOLOR  LCD_WHITE // LCD_RED
-#define TEMPCOLOR   LCD_LIGHTGREEN
-#define TOPTXTCOLOR LCD_WHITE
-#define TOPNUMCOLOR LCD_ORANGE
-//------------ end of Global variables shared between tasks -------------
-uint32_t sqrt32(uint32_t s);
-#define THREADFREQ 1000   // frequency in Hz of round robin scheduler
+  char sms_read_buffer[255];
+  uint32_t sms_readlen;
+  for(int i=0 ; i<n; i++){
+    SIM7600G_ReadSMS(i, sms_read_buffer,
+                                255, &sms_readlen);
+    char sender[100];
+    SIM7600G_GetSMSSender(i, sender, 100);
+  }
+  while(1){};
+}
 
-//---------------- Task0 samples sound from microphone ----------------
+
+
+// *************RTOS version***************
+int32_t I2Cmutex;         // exclusive access to I2C
+OPT3001_Result Light;     // lux = 0.01*(2^Exponent)*Result
+uint32_t TimeMs;          // elapsed time in ms
+uint32_t Humidity;        // units 0.1% (ranges from 0 to 1000, 123 means 12.3%
+int32_t Temperature;      // units 0.1 C
+int16_t RawTemperature;   // 0.0078125 C
+int32_t FixedTemperature; // 0.1C
+int32_t Ax,Ay,Az; // acceleration
+int32_t Rx,Ry,Rz; // gyro pitch, roll, yaw
+int32_t Mx,My,Mz; // magnetic field strength
+// Select whether or not to check for errors
+#define ERRORCHECK 1
+
+//---------------- Task0 real time periodic event ----------------
 // Event thread run by OS in real time at 1000 Hz
-#define SOUNDRMSLENGTH 1000 // number of samples to collect before calculating RMS (may overflow if greater than 4104)
-int16_t SoundArray[SOUNDRMSLENGTH];
 // *********Task0_Init*********
-// initializes microphone
-// Task0 measures sound intensity
+// initializes TimeMs
+// Task0 maintains time
 // Inputs:  none
 // Outputs: none
+uint32_t SupplyCurrent; // mA measured with LTC6102
+// Rsense = 0.05ohm
+// Rin = 100 ohm
+// Rout=4999 ohm (gain=50)
 void Task0_Init(void){
-  BSP_Microphone_Init();
-  SoundRMS = 0;
+  TimeMs = 0;
+  ADC0_InitSWTriggerCh13();
 }
 // *********Task0*********
 // Periodic event thread runs in real time at 1000 Hz
-// collects data from microphone
+// Task0 maintains time, measures +5V supply current
+// Periodic events cannot block, spin, suspend or sleep
+// Periodic events can call OS_Signal but not OS_Wait
 // Inputs:  none
 // Outputs: none
-void Task0(void){
-  static int32_t soundSum = 0;
-  static int time = 0;// units of microphone sampling rate
-
-  Profile_Toggle0(); // viewed by a real logic analyzer to know Task0 started
-  BSP_Microphone_Input(&SoundData);
-  soundSum = soundSum + (int32_t)SoundData;
-  SoundArray[time] = SoundData;
-  time = time + 1;
-  if(time == SOUNDRMSLENGTH){
-    SoundAvg = soundSum/SOUNDRMSLENGTH;
-    soundSum = 0;
-    OS_Signal(&NewData); // makes task5 run every 1 sec
-    time = 0;
-  }
+// Warning: Execution time must be much less than 1ms
+// P1->OUT is 0x4000.4C02
+#define P1_0  (*((volatile uint8_t *)(0x42000000+32*0x4C03+4*0)))  /* Port 1.0 Output */
+#define Gain 1320 // 1320/16384 = 0.080582523mA/ADC value
+void Task0(void){uint32_t data;
+  P1_0 = P1_0^0x01; // viewed by a real logic analyzer to know Task0 started
+  TimeMs = TimeMs + 1;
+  data = ADC_In13();
+  SupplyCurrent = (Gain*data)/16384;
 }
 /* ****************************************** */
 /*          End of Task0 Section              */
 /* ****************************************** */
 
-//---------------- Task1 measures acceleration ----------------
-// Event thread run by OS in real time at 10 Hz
-uint32_t LostTask1Data;     // number of times that the FIFO was full when acceleration data was ready
-uint16_t AccX, AccY, AccZ;  // returned by BSP as 10-bit numbers
-#define ALPHA 128           // The degree of weighting decrease, a constant smoothing factor between 0 and 1,023. A higher ALPHA discounts older observations faster.
-                            // basic step counting algorithm is based on a forum post from
-                            // http://stackoverflow.com/questions/16392142/android-accelerometer-profiling/16539643#16539643
-enum state{                 // the step counting algorithm cycles through four states
-  LookingForMax,            // looking for a local maximum in current magnitude
-  LookingForCross1,         // looking for current magnitude to cross average magnitude, minus a constant
-  LookingForMin,            // looking for a local minimum in current magnitude
-  LookingForCross2          // looking for current magnitude to cross average magnitude, plus a constant
-};
-enum state AlgorithmState = LookingForMax;
-#define LOCALCOUNTTARGET 5  // The number of valid measured magnitudes needed to confirm a local min or local max.  Increase this number for longer strides or more frequent measurements.
-#define AVGOVERSHOOT 25     // The amount above or below average a measurement must be to count as "crossing" the average.  Increase this number to reject increasingly hard shaking as steps.
-// *********Task1_Init*********
-// initializes accelerometer
-// Task1 counts Steps
-// Inputs:  none
-// Outputs: none
-void Task1_Init(void){
-  BSP_Accelerometer_Init();
-  // initialize the exponential weighted moving average filter
-  BSP_Accelerometer_Input(&AccX, &AccY, &AccZ);
-  Magnitude = sqrt32(AccX*AccX + AccY*AccY + AccZ*AccZ);
-  EWMA = Magnitude;                // this is a guess; there are many options
-  Steps = 0;
-  LostTask1Data = 0;
-}
-// *********Task1*********
-// collects data from accelerometer
-// Inputs:  none
-// Outputs: none
-void Task1(void){uint32_t squared;
-  Profile_Toggle1(); // viewed by a real logic analyzer to know Task1 started
-
-  BSP_Accelerometer_Input(&AccX, &AccY, &AccZ);
-  squared = AccX*AccX + AccY*AccY + AccZ*AccZ;
-  if(OS_FIFO_Put(squared) == -1){  // makes Task2 run every 100ms
-    LostTask1Data = LostTask1Data + 1;
+//---------------- Task1 handles text messages ----------------
+// Main thread scheduled by OS round robin preemptive scheduler
+//------------UART0_InCharBlocking------------
+// Wait for new serial port input
+// Input: none
+// Output: ASCII code for key typed
+char UART0_InCharBlocking(void){
+  while((EUSCI_A0->IFG&0x01) == 0){
+    OS_Suspend();
   }
-  Time++; // in 100ms units
+  return((char)(EUSCI_A0->RXBUF));
+}
+void UART0_InStringBlocking(char *bufPt, uint16_t max) {
+int length=0;
+char character;
+  character = UART0_InCharBlocking();
+  while(character != CR){
+    if(character == BS){
+      if(length){
+        bufPt--;
+        length--;
+        UART0_OutChar(BS);
+      }
+    }
+    else if(length < max){
+      *bufPt = character;
+      bufPt++;
+      length++;
+      UART0_OutChar(character);
+    }
+    character = UART0_InChar();
+  }
+  *bufPt = 0;
+}
+void UART0_OutCharBlocking(char letter){
+  while((EUSCI_A0->IFG&0x02) == 0){
+    OS_Suspend();
+  }
+  EUSCI_A0->TXBUF = letter;
+}
+void UART0_OutStringBlocking(char *pt){
+  while(*pt){
+    UART0_OutCharBlocking(*pt);
+    pt++;
+  }
+}
+// P2->OUT is 0x4000.4C03
+#define P2_0  (*((volatile uint8_t *)(0x42000000+32*0x4C03+4*0)))  /* Port 2.0 Output */
+void Task1(void){
+  char string[64];
+  UART0_OutStringBlocking("\n\rRTOS version for SMS7600 4G\n\r");
+  UART0_OutStringBlocking("Valvano Sept 12, 2022\n\r");
+  SIM7600G_Init(SMS_SIM7600G); // more space on flash in SIM7600G
+  UART0_OutStringBlocking("***Initialization Complete***\n\r");
+  UART0_OutStringBlocking("\n\rType message to send text\n\r");
+
+  while(1){
+    P2_0 = P2_0^0x01; // viewed by a real logic analyzer to know Task1 started
+    OS_Sleep(100);
+    UART0_OutStringBlocking("\n\rText: ");
+    UART0_InStringBlocking(string,63); // user enters a string
+    LaunchPad_LED(1);
+    SIM7600G_SendSMS(VALVANO,(uint8_t *)string);
+    LaunchPad_LED(0);
+
+  }
 }
 /* ****************************************** */
 /*          End of Task1 Section              */
 /* ****************************************** */
 
 
-//---------------- Task2 calculates steps and plots data on LCD ----------------
+//---------------- Task2 measures temperature and humidity from HC2080
 // Main thread scheduled by OS round robin preemptive scheduler
-// accepts data from accelerometer, calculates steps, plots on LCD
-// If no data are lost, the main loop in Task2 runs exactly at 10 Hz, but not in real time
-#define ACCELERATION_MAX 1400
-#define ACCELERATION_MIN 600
-#define SOUND_MAX 900
-#define SOUND_MIN 300
-#define LIGHT_MAX 2000
-#define LIGHT_MIN 0
-#define TEMP_MAX 1023
-#define TEMP_MIN 0
-void drawaxes(void){
-  OS_Wait(&LCDmutex);
-  if(PlotState == Accelerometer){
-    BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Mag", MAGCOLOR, "Ave", EWMACOLOR, ACCELERATION_MAX, ACCELERATION_MIN);
-  } else if(PlotState == Microphone){
-    BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Sound", SOUNDCOLOR, "", 0, SoundData+100, SoundData-100);
-  } else if(PlotState == Temperature){
-    BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Temp", TEMPCOLOR, "", 0, TEMP_MAX, TEMP_MIN);
-  } else if(PlotState == Light){
-    BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Light", LIGHTCOLOR, "", 0, LIGHT_MAX, LIGHT_MIN);
-  }
-  OS_Signal(&LCDmutex);  ReDrawAxes = 0;
-}
-void Task2(void){uint32_t data;
-  uint32_t localMin;   // smallest measured magnitude since odd-numbered step detected
-  uint32_t localMax;   // largest measured magnitude since even-numbered step detected
-  uint32_t localCount; // number of measured magnitudes above local min or below local max
-  localMin = 1024;
-  localMax = 0;
-  localCount = 0;
-  drawaxes();
+void Task2(void){
+  OS_Wait(&I2Cmutex);
+  HDC2080_Init();
+  OS_Signal(&I2Cmutex);
   while(1){
-
-
-    data = OS_FIFO_Get();
     Profile_Toggle2(); // viewed by a real logic analyzer to know Task2 started
-    Magnitude = sqrt32(data);
-    EWMA = (ALPHA*Magnitude + (1023 - ALPHA)*EWMA)/1024;
-    if(AlgorithmState == LookingForMax){
-      if(Magnitude > localMax){
-        localMax = Magnitude;
-        localCount = 0;
-      } else{
-        localCount = localCount + 1;
-        if(localCount >= LOCALCOUNTTARGET){
-          AlgorithmState = LookingForCross1;
-        }
-      }
-    } else if(AlgorithmState == LookingForCross1){
-      if(Magnitude > localMax){
-      // somehow measured a very large magnitude
-        localMax = Magnitude;
-        localCount = 0;
-        AlgorithmState = LookingForMax;
-      } else if(Magnitude < (EWMA -  AVGOVERSHOOT)){
-        // step detected
-        Steps = Steps + 1;
-        localMin = 1024;
-        localCount = 0;
-        AlgorithmState = LookingForMin;
-      }
-    } else if(AlgorithmState == LookingForMin){
-      if(Magnitude < localMin){
-        localMin = Magnitude;
-        localCount = 0;
-      } else{
-        localCount = localCount + 1;
-        if(localCount >= LOCALCOUNTTARGET){
-          AlgorithmState = LookingForCross2;
-        }
-      }
-    } else if(AlgorithmState == LookingForCross2){
-      if(Magnitude < localMin){
-      // somehow measured a very small magnitude
-        localMin = Magnitude;
-        localCount = 0;
-        AlgorithmState = LookingForMin;
-      } else if(Magnitude > (EWMA + AVGOVERSHOOT)){
-        // step detected
-        Steps = Steps + 1;
-        localMax = 0;
-        localCount = 0;
-        AlgorithmState = LookingForMax;
-      }
-    }
-    if(ReDrawAxes){
-      drawaxes();
-      ReDrawAxes = 0;
-    }
-    OS_Wait(&LCDmutex);
-    if(PlotState == Accelerometer){
-      BSP_LCD_PlotPoint(Magnitude, MAGCOLOR);
-      BSP_LCD_PlotPoint(EWMA, EWMACOLOR);
-    } else if(PlotState == Microphone){
-      BSP_LCD_PlotPoint(SoundData, SOUNDCOLOR);
-    } else if(PlotState == Temperature){
-      BSP_LCD_PlotPoint(TemperatureData, TEMPCOLOR);
-    } else if(PlotState == Light){
-      BSP_LCD_PlotPoint(LightData, LIGHTCOLOR);
-    }
-    BSP_LCD_PlotIncrement();
-    OS_Signal(&LCDmutex);
+    OS_Wait(&I2Cmutex);
+    Humidity = HDC2080_ReadHumidity();
+    Temperature = HDC2080_ReadTemperature();
+    OS_Signal(&I2Cmutex);
+    OS_Sleep(2000);     // every 2 seconds
   }
 }
 /* ****************************************** */
@@ -273,60 +306,189 @@ void Task2(void){uint32_t data;
 /* ****************************************** */
 
 
-//------------Task3 handles switch input, buzzer output, LED output-------
-// *********Task3*********
+//------------Task3 handles accelerator-------
+/* 1 frames containing a 1 byte header, 6 bytes of accelerometer,
+ * 6 bytes of gyroscope and 8 bytes of magnetometer data. This results in
+ * 21 bytes per frame. Additional 40 bytes in case sensor time readout is enabled */
+#define FIFO_SIZE   250
+
+/* Variable declarations */
+struct bmi160_dev bmi;
+struct bmm150_dev bmm;
+uint8_t fifo_buff[FIFO_SIZE];
+struct bmi160_fifo_frame fifo_frame;
+struct bmi160_aux_data aux_data;
+struct bmm150_mag_data mag_data;
+struct bmi160_sensor_data gyro_data, accel_data;
+int8_t rslt;
+
+/* Auxiliary function definitions */
+int8_t bmm150_aux_read(uint8_t id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len){
+ // (void) id; /* id is unused here */
+  return bmi160_aux_read(reg_addr, reg_data, len, &bmi);
+}
+
+int8_t bmm150_aux_write(uint8_t id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len){
+//  (void) id; /* id is unused here */
+  return bmi160_aux_write(reg_addr, reg_data, len, &bmi);
+}
+
+int8_t I2cGetRegs(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data, uint16_t len){
+  if(len == 1){
+    I2CB1_Send(dev_addr, &reg_addr, 1);
+    data[0] = I2CB1_Recv1(dev_addr);
+  }else{
+    I2CB1_Send(dev_addr, &reg_addr, 1);
+    I2CB1_Recv(dev_addr,data,len);
+  }
+  return BMI160_OK;
+}
+
+int8_t I2cSetRegs(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data, uint16_t len){
+  if(len == 1){
+    I2CB1_Send2(dev_addr, reg_addr, data[0]);
+    return BMI160_OK;
+  }
+  if(len == 2){
+    I2CB1_Send3(dev_addr, reg_addr, data);
+    return BMI160_OK;
+  }
+  if(len == 3){
+    I2CB1_Send4(dev_addr, reg_addr, data);
+    return BMI160_OK;
+  }
+  return BMI160_E_INVALID_INPUT;
+}
+#ifdef ERRORCHECK
+void CheckFail(char *message){
+  if(rslt){
+    while(1){
+      P1->OUT ^= 0x01;         // profile
+      Clock_Delay1ms(500);
+    }
+  }
+}
+#else
+#define CheckFail(X)
+#endif
+
 // Main thread scheduled by OS round robin preemptive scheduler
 // non-real-time task
-// checks the switches, updates the mode, and outputs to the buzzer and LED
+// reads data from 9-axis IMU
 // Inputs:  none
 // Outputs: none
 void Task3(void){
-  static uint8_t prev1 = 0, prev2 = 0;
-  uint8_t current;
+  OS_Wait(&I2Cmutex);
+  bmi.id = BMI160_I2C_ADDR;
+  bmi.read = I2cGetRegs;
+  bmi.write = I2cSetRegs;
+  bmi.delay_ms = Clock_Delay1ms;
+  bmi.interface = BMI160_I2C_INTF;
+
+      /* The BMM150 API tunnels through the auxiliary interface of the BMI160 */
+      /* Check the pins of the BMM150 for the right I2C address */
+  bmm.dev_id = BMI160_AUX_BMM150_I2C_ADDR;
+  bmm.intf = BMM150_I2C_INTF;
+  bmm.read = bmm150_aux_read;
+  bmm.write = bmm150_aux_write;
+  bmm.delay_ms = Clock_Delay1ms;
+
+  rslt = bmi160_soft_reset(&bmi);
+  CheckFail("bmi160_soft_reset");
+  rslt = bmi160_init(&bmi);
+  CheckFail("bmi160_init");
+
+      /* Configure the BMI160's auxiliary interface for the BMM150 */
+  bmi.aux_cfg.aux_sensor_enable = BMI160_ENABLE;
+  bmi.aux_cfg.aux_i2c_addr = bmm.dev_id;
+  bmi.aux_cfg.manual_enable = BMI160_ENABLE; /* Manual mode */
+  bmi.aux_cfg.aux_rd_burst_len = BMI160_AUX_READ_LEN_3; /* 8 bytes */
+  rslt = bmi160_aux_init(&bmi);
+  CheckFail("bmi160_aux_init");
+
+  rslt = bmm150_init(&bmm);
+  CheckFail("bmm150_init");
+
+      /* Configure the accelerometer */
+  bmi.accel_cfg.odr = BMI160_ACCEL_ODR_100HZ;
+  bmi.accel_cfg.range = BMI160_ACCEL_RANGE_2G;
+  bmi.accel_cfg.bw = BMI160_ACCEL_BW_NORMAL_AVG4;
+  bmi.accel_cfg.power = BMI160_ACCEL_NORMAL_MODE;
+
+      /* Configure the gyroscope */
+  bmi.gyro_cfg.odr = BMI160_GYRO_ODR_100HZ;
+  bmi.gyro_cfg.range = BMI160_GYRO_RANGE_2000_DPS;
+  bmi.gyro_cfg.bw = BMI160_GYRO_BW_NORMAL_MODE;
+  bmi.gyro_cfg.power = BMI160_GYRO_NORMAL_MODE;
+
+  rslt = bmi160_set_sens_conf(&bmi);
+  CheckFail("bmi160_set_sens_conf");
+
+     /* Configure the magnetometer. The regular preset supports up to 100Hz in Forced mode */
+  bmm.settings.preset_mode = BMM150_PRESETMODE_REGULAR;
+  rslt = bmm150_set_presetmode(&bmm);
+  CheckFail("bmm150_set_presetmode");
+
+      /* It is important that the last write to the BMM150 sets the forced mode.
+       * This is because the BMI160 writes the last value to the auxiliary sensor
+       * after every read */
+  bmm.settings.pwr_mode = BMM150_FORCED_MODE;
+  rslt = bmm150_set_op_mode(&bmm);
+  CheckFail("bmm150_set_op_mode");
+
+  uint8_t bmm150_data_start = BMM150_DATA_X_LSB;
+  bmi.aux_cfg.aux_odr = BMI160_AUX_ODR_100HZ;
+  rslt = bmi160_set_aux_auto_mode(&bmm150_data_start, &bmi);
+  CheckFail("bmi160_set_aux_auto_mode");
+
+      /* Link the FIFO memory location */
+  fifo_frame.data = fifo_buff;
+  fifo_frame.length = FIFO_SIZE;
+  bmi.fifo = &fifo_frame;
+
+   /* Clear all existing FIFO configurations */
+  rslt = bmi160_set_fifo_config(BMI160_FIFO_CONFIG_1_MASK , BMI160_DISABLE, &bmi);
+  CheckFail("bmi160_set_aux_auto_mode");
+
+  uint8_t fifo_config = BMI160_FIFO_HEADER | BMI160_FIFO_AUX |  BMI160_FIFO_ACCEL | BMI160_FIFO_GYRO;
+  rslt = bmi160_set_fifo_config(fifo_config, BMI160_ENABLE, &bmi);
+  CheckFail("bmi160_set_fifo_config");
+  OS_Signal(&I2Cmutex);
+
   while(1){
     Profile_Toggle3(); // viewed by a real logic analyzer to know Task3 started
-    BSP_Buzzer_Set(0);
-    current = BSP_Button1_Input();
-    if((current == 0) && (prev1 != 0)){
-      // Button1 was pressed since last loop
-      if(PlotState == Accelerometer){
-        PlotState = Microphone;
-      } else if(PlotState == Microphone){
-        PlotState = Temperature;
-      } else if(PlotState == Temperature){
-        PlotState = Light;
-      } else if(PlotState == Light){
-        PlotState = Accelerometer;
-      }
-      ReDrawAxes = 1;                // redraw axes on next call of display task
-      BSP_Buzzer_Set(512);           // beep until next call of this task
-    }
-    prev1 = current;
-    current = BSP_Button2_Input();
-    if((current == 0) && (prev2 != 0)){
-      // Button2 was pressed since last loop
-      if(PlotState == Accelerometer){
-        PlotState = Light;
-      } else if(PlotState == Microphone){
-        PlotState = Accelerometer;
-      } else if(PlotState == Temperature){
-        PlotState = Microphone;
-      } else if(PlotState == Light){
-        PlotState = Temperature;
-      }
-      ReDrawAxes = 1;                // redraw axes on next call of display task
-      BSP_Buzzer_Set(512);           // beep until next call of this task
-    }
-    prev2 = current;
-    // update the LED
-    switch(AlgorithmState){
-      case LookingForMax: BSP_RGB_Set(500, 0, 0); break;
-      case LookingForCross1: BSP_RGB_Set(350, 350, 0); break;
-      case LookingForMin: BSP_RGB_Set(0, 500, 0); break;
-      case LookingForCross2: BSP_RGB_Set(0, 0, 500); break;
-      default: BSP_RGB_Set(0, 0, 0);
-    }
-    OS_Sleep(10); // debounce the switches
+
+    /* It is VERY important to reload the length of the FIFO memory as after the
+     * call to bmi160_get_fifo_data(), the bmi.fifo->length contains the
+     * number of bytes read from the FIFO */
+    OS_Wait(&I2Cmutex);
+    bmi.fifo->length = FIFO_SIZE;
+    rslt = bmi160_get_fifo_data(&bmi);
+    /* Check rslt for any error codes */
+
+    uint8_t aux_inst = 1, gyr_inst = 1, acc_inst = 1;
+    rslt = bmi160_extract_aux(&aux_data, &aux_inst, &bmi);
+    CheckFail("bmi160_extract_aux");
+    rslt = bmi160_extract_gyro(&gyro_data, &gyr_inst, &bmi);
+    CheckFail("bmi160_extract_gyro");
+    rslt = bmi160_extract_accel(&accel_data, &acc_inst, &bmi);
+    CheckFail("bmi160_extract_accel");
+
+    rslt = bmm150_aux_mag_data(&aux_data.data[0], &bmm);
+    OS_Signal(&I2Cmutex);
+    CheckFail("bmm150_aux_mag_data");
+        /* Copy the compensated magnetometer data */
+    mag_data = bmm.data;
+    Rx = gyro_data.x;
+    Ry = gyro_data.y;
+    Rz = gyro_data.z;
+    Ax = accel_data.x;
+    Ay = accel_data.y;
+    Az = accel_data.z;
+    Mx = mag_data.x;
+    My = mag_data.y;
+    Mz = mag_data.z;
+    OS_Sleep(100); // 10 Hz
   }
 }
 /* ****************************************** */
@@ -334,28 +496,22 @@ void Task3(void){
 /* ****************************************** */
 
 
-//------------Task4 measures temperature-------
-// *********Task4*********
+//------------Task4 measures temperature from TMP117-------
 // Main thread scheduled by OS round robin preemptive scheduler
 // measures temperature
 // Inputs:  none
 // Outputs: none
-void Task4(void){int32_t voltData,tempData;
-  int done;
+void Task4(void){
+  OS_Wait(&I2Cmutex);
+  TMP117_Init();
+  OS_Signal(&I2Cmutex);
   while(1){
     Profile_Toggle4(); // viewed by a real logic analyzer to know Task4 started
-
     OS_Wait(&I2Cmutex);
-    BSP_TempSensor_Start();
+    RawTemperature = TMP117_ReadTemperature();
     OS_Signal(&I2Cmutex);
-    done = 0;
-    OS_Sleep(1000);    // waits about 1 sec
-    while(done == 0){
-      OS_Wait(&I2Cmutex);
-      done = BSP_TempSensor_End(&voltData, &tempData);
-      OS_Signal(&I2Cmutex);
-    }
-    TemperatureData = tempData/10000;
+    FixedTemperature = (10*RawTemperature)/128; // 0.1C
+    OS_Sleep(1000);     // every 1 second
   }
 }
 /* ****************************************** */
@@ -363,167 +519,68 @@ void Task4(void){int32_t voltData,tempData;
 /* ****************************************** */
 
 
-/* ------------------------------------------ */
-//------- Task5 displays text on LCD -----------
-/* ------------------------------------------ */
-// If no data are lost, the main loop in Task5 runs exactly at 1 Hz, but not in real time
-// *********Task5*********
+//------- Task5 measures light from OPT3001 -----------
 // Main thread scheduled by OS round robin preemptive scheduler
-// updates the text at the top and bottom of the LCD
-// Inputs:  none
-// Outputs: none
-void Task5(void){int32_t soundSum; int count=0;
-  OS_Wait(&LCDmutex);
-  BSP_LCD_DrawString(0,  0, "Temp=",  TOPTXTCOLOR);
-  BSP_LCD_DrawString(0,  1, "Step=",  TOPTXTCOLOR);
-  BSP_LCD_DrawString(10, 0, "Light=", TOPTXTCOLOR);
-  BSP_LCD_DrawString(10, 1, "Sound=", TOPTXTCOLOR);
-  OS_Signal(&LCDmutex);
+void Task5(void){
+  OS_Wait(&I2Cmutex);
+  OPT3001_Init();
+  OS_Signal(&I2Cmutex);
   while(1){
-    OS_Wait(&NewData);
     Profile_Toggle5(); // viewed by a real logic analyzer to know Task5 started
-    soundSum = 0;
-    for(int i=0; i<SOUNDRMSLENGTH; i=i+1){
-      soundSum = soundSum + (SoundArray[i] - SoundAvg)*(SoundArray[i] - SoundAvg);
-    }
-    SoundRMS = sqrt32(soundSum/SOUNDRMSLENGTH);
-    OS_Wait(&LCDmutex);
-    BSP_LCD_SetCursor(5,  0); BSP_LCD_OutUFix2_1(TemperatureData, TEMPCOLOR);
-    BSP_LCD_SetCursor(5,  1); BSP_LCD_OutUDec4(Steps,             MAGCOLOR);
-    BSP_LCD_SetCursor(16, 0); BSP_LCD_OutUDec4(LightData,         LIGHTCOLOR);
-    BSP_LCD_SetCursor(16, 1); BSP_LCD_OutUDec4(SoundRMS,          SOUNDCOLOR);
-    BSP_LCD_SetCursor(16,12); BSP_LCD_OutUDec4(Time/10,           TOPNUMCOLOR);
-//debug code
-    if(LostTask1Data){
-      BSP_LCD_SetCursor(0, 12); BSP_LCD_OutUDec4(LostTask1Data, BSP_LCD_Color565(255, 0, 0));
-    }
-//end of debug code
-    OS_Signal(&LCDmutex);
-    count++;
-    if(count==5){
-      Send0Flag=1;
-      count=0;
-    }
+    OS_Wait(&I2Cmutex);
+    Light = OPT3001_ReadLight();
+    OS_Signal(&I2Cmutex);
+    OS_Sleep(1000);     // every 1 second
   }
 }
 /* ****************************************** */
 /*          End of Task5 Section              */
 /* ****************************************** */
 
-//---------------- Task6 measures light ----------------
+//---------------- Task6 dummy task ----------------
 // *********Task6*********
+// This OS needs one foreground task that never blocks or sleeps
 // Main thread scheduled by OS round robin preemptive scheduler
-// Task6 measures light intensity
-// Inputs:  none
-// Outputs: none
-void Task6(void){ uint32_t lightData;
-  int done;
+uint32_t CPUTimeAvailable; // the faster this counts the more CPU time available
+void Task6(void){
+  CPUTimeAvailable = 0;
   while(1){
     Profile_Toggle6(); // viewed by a real logic analyzer to know Task6 started
-
-    OS_Wait(&I2Cmutex);
-    BSP_LightSensor_Start();
-    OS_Signal(&I2Cmutex);
-    done = 0;
-    OS_Sleep(800);     // waits about 0.8 sec
-    while(done == 0){
-      OS_Wait(&I2Cmutex);
-      done = BSP_LightSensor_End(&lightData);
-      OS_Signal(&I2Cmutex);
-    }
-    LightData = lightData/100;
+    CPUTimeAvailable++;
+    OS_Suspend();   // release processor to other tasks
   }
 }
 /* ****************************************** */
 /*          End of Task6 Section              */
 /* ****************************************** */
 
-
-
-//---------------- Task7 dummy function ----------------
-// *********Task7*********
-// Main thread scheduled by OS round robin preemptive scheduler
-// This should never block or sleep
-// Task7
-// Inputs:  none
-// Outputs: none
-uint32_t Count7;
-void Task7(void){
-  Count7 = 0;
-  while(1){
-    Count7++;
-    WaitForInterrupt();
-  }
-}
-/* ****************************************** */
-/*          End of Task7 Section              */
-/* ****************************************** */
-
-//---------------- Step 6 ----------------
-// Step 6 is to implement the fitness device by combining the
-// OS functions that were implemented and tested in the earlier
-// steps with the user tasks in this file.  Completing this
-// step will give you your grade, so remember to change the
-// second parameter in TExaS_Init() to your 4-digit number.
-// Task   Purpose        When to Run
-// Task0  microphone     periodically exactly every 1 ms
-// Task1  accelerometer  periodically exactly every 100 ms
-// Task2  plot on LCD    after Task1 finishes
-// Task3  switch/buzzer  periodically every 10 ms
-// Task4  temperature    periodically every 1 sec
-// Task5  numbers on LCD after Task0 runs SOUNDRMSLENGTH times
-// Task6  light          periodically every 800 ms
-// Task7  dummy          never blocks or sleeps
 // Remember that you must have exactly one main() function, so
 // to work on this step, you must rename all other main()
 // functions in this file.
-int main(void){
-  OS_Init();
-  Profile_Init();  // initialize the 7 hardware profiling pins
-  Task0_Init();    // microphone init
-  Task1_Init();    // accelerometer init
-  BSP_Button1_Init();
-  BSP_Button2_Init();
-  BSP_RGB_Init(0, 0, 0);
-  BSP_Buzzer_Init(0);
-  BSP_LCD_Init();
-  BSP_LCD_FillScreen(BSP_LCD_Color565(0, 0, 0));
+int realmain(void){ //RTOS main
+  Clock_Init48MHz();
 
-  BSP_LightSensor_Init();
-  BSP_TempSensor_Init();
-  Time = 0;
-  OS_InitSemaphore(&NewData, 0);  // 0 means no data
-  OS_InitSemaphore(&LCDmutex, 1); // 1 means free
+  OS_Init();
+  Profile_Init();
+  UART0_Initprintf();
+  LaunchPad_Init();
+  UART0_OutString("Embedded IoT SIM7600 project\n\r");
+
+  SIM7600G_Init(SMS_SIM7600G); // more space on flash in SIM7600G
+  UART0_OutString("***Initialization Complete***\n\r");
+  Task0_Init();       // real-time init
+
+
+  UART0_Initprintf(); // initialize UART and printf
+
+  I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
   OS_InitSemaphore(&I2Cmutex, 1); // 1 means free
   OS_FIFO_Init();                 // initialize FIFO used to send data between Task1 and Task2
   // Task 0 should run every 1ms
   OS_AddPeriodicEventThread(&Task0, 1);
-  // Task 1 should run every 100ms
-  OS_AddPeriodicEventThread(&Task1, 100);
-  // Task2, Task3, Task4, Task5, Task6, Task7 are main threads
-  OS_AddThreads(&Task2, &Task3, &Task4, &Task5, &Task6, &Task7);
-  // when grading change 1000 to 4-digit number from edX
-  BSP_LCD_FillScreen(BSP_LCD_Color565(0, 0, 0));
-  UART0_Init();
-  Clock_Init48MHz();          // initialize 48 MHz
-  // if you hold either switch down, it will pause so you can see grader output
-  while((BSP_Button1_Input()==0)||(BSP_Button2_Input())==0){};
-  OS_Launch(BSP_Clock_GetFreq()/THREADFREQ); // doesn't return, interrupts enabled in here
-  return 0;             // this never executes
-}
-/* ****************************************** */
-/*          End of Step 6 Section             */
-/* ****************************************** */
 
-// Newton's method
-// s is an integer
-// sqrt(s) is an integer
-uint32_t sqrt32(uint32_t s){
-uint32_t t;   // t*t will become s
-int n;             // loop counter
-  t = s/16+1;      // initial guess
-  for(n = 16; n; --n){ // will finish
-    t = ((t*t+s)/t)/2;
-  }
-  return t;
+  // Task1, Task2, Task3, Task4, Task5, Task6 are main threads
+  OS_AddThreads(&Task1, &Task2, &Task3, &Task4, &Task5, &Task6);
+  OS_Launch(48000); // 1ms switching, doesn't return, interrupts enabled in here
+  return 0;         // this never executes
 }
