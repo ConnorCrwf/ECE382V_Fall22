@@ -78,7 +78,7 @@ uint16_t TemperatureHalfwordData; // 1C
 
 // New variables
 uint16_t Switch1;       // 16-bit notify data from Button 1
-uint32_t LED;           // 32-bit write-only data to LED
+uint16_t LED;           // 16-bit write-only data to LED
 
 // semaphores
 int32_t NewData;  // true when new numbers to display on top of LCD
@@ -546,7 +546,7 @@ void Bluetooth_WritePlotState(void){ // called on a SNP Characteristic Write Ind
 // }
 void Bluetooth_LED(void){
   LaunchPad_Output(LED);  // set LEDs with bottom bits
-  OutValue("\n\rWordData=",LED);
+  OutValue("\n\rLED Data=",LED);
 }
 extern uint16_t edXNum; // actual variable within TExaS
 void Bluetooth_Init(void){volatile int r;
@@ -565,9 +565,9 @@ void Bluetooth_Init(void){volatile int r;
   // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
 
   // New Characteristics
-  Switch1 = 0; 
+  // Switch1 = 0; 
   // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Switch1,"Button 1",&Bluetooth_Switch1);
-  Lab6_AddCharacteristic(0xFFF8,4,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
+  Lab6_AddCharacteristic(0xFFF8,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
   Lab6_AddNotifyCharacteristic(0xFFF9,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
 
   // TODO Make notify for light and plot it to pygui

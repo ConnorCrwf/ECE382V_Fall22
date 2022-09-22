@@ -206,8 +206,8 @@ async def pygame_gui():
                 asyncio.create_task(read_Temperature(client_g))
             elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
                 Word_g = current_keys_g
-                print ("Word = ", Word_g)
-                value = struct.pack(">h", Word_g) #pack into binary, 1 unsigned long (32bit)
+                print ("LED = ", Word_g)
+                value = struct.pack(">h", Word_g) # pack into binary, 1 unsigned long (32bit)
                 #print (value)
                 asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
 
