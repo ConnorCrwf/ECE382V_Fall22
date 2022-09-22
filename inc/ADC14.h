@@ -15,10 +15,10 @@
  * - sample just P8.2/A23 <br>
  * @version   TI-RSLK MAX v1.1
  * @author    Daniel Valvano and Jonathan Valvano
- * @copyright Copyright 2019 by Jonathan W. Valvano, valvano@mail.utexas.edu,
+ * @copyright Copyright 2022 by Jonathan W. Valvano, valvano@mail.utexas.edu,
  * @warning   AS-IS
  * @note      For more information see  http://users.ece.utexas.edu/~valvano/
- * @date      June 28, 2019
+ * @date      September 14,2022
 <table>
 <caption id="ADCpins">ADC pins used on the TI-RSLK MAX</caption>
 <tr><th>Pin  <th>ADC channel<th>Sensor
@@ -90,6 +90,18 @@ void ADC0_InitSWTriggerCh6(void);
  * @brief  Initialize 14-bit ADC0
  */
 void ADC0_InitSWTriggerCh12(void);
+
+/**
+ * Initialize 14-bit ADC0 in software-triggered mode to take
+ * measurements when the associated function is called.
+ * One channel is measured: P4.0/A13
+ * @param none
+ * @return none
+ * @note  The 3.3V analog supply is used as reference
+ * @brief  Initialize 14-bit ADC0
+ */
+void ADC0_InitSWTriggerCh13(void);
+
 
 /**
  * Initialize 14-bit ADC0 in software-triggered mode to take
@@ -266,6 +278,18 @@ uint32_t ADC_In19(void);
  */
 uint32_t ADC_In12(void);
 
+/**
+ * Trigger a single ADC measurement on P4.0/A13,
+ * wait for it to complete, and return the 14-bit result
+ * as 0 to 16383.
+ * The ADC input voltage range is 0 to 3.3V.
+ * Busy-wait synchronization used.
+ * @param none
+ * @return 14-bit result
+ * @note  Assumes ADC0_InitSWTriggerCh13() has been called.
+ * @brief  Trigger ADC measurement and wait for result.
+ */
+uint32_t ADC_In13(void);
 /**
  * Trigger a single ADC measurement and put the results in
  * the pointers given.  The pointers are 32-bit integers

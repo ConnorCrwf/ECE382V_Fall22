@@ -65,8 +65,11 @@ policies, either expressed or implied, of the FreeBSD Project.
 //   SDA    SSD1306 SDA <> P6.4 I2C data SDA_S
 //   SCL    SSD1306 SCL <- P6.5 I2C clock SCL_S with 1.5k pullup to 3.3V
 
+
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include "msp.h"
 #include "..\inc\CortexM.h"
 #include "..\inc\SysTickInts.h"
@@ -75,7 +78,11 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "..\inc\UART0.h"
 #include "..\inc\UART1.h"
 #include "..\inc\SSD1306_I2C.h"
-volatile uint32_t Time,MainCount;
+#include "..\inc\TimerA0.h"
+#include "Seeed_HC12main.h"
+
+
+volatile uint32_t Time, MainCount;
 #define LEDOUT (*((volatile uint8_t *)(0x42098040)))
 // P3->OUT is 8-bit port at 0x4000.4C22
 // I/O address be 0x4000.0000+n, and let b represent the bit 0 to 7.
@@ -85,43 +92,6 @@ volatile uint32_t Time,MainCount;
 char HC12data;
 uint32_t Message;
 int Flag; // semaphore
-// every 10ms
-void SysTick_Handler(void){
-  uint8_t in;
-  LEDOUT ^= 0x01;       // toggle P1.0
-  LEDOUT ^= 0x01;       // toggle P1.0
-  Time = Time + 1;
-  uint8_t ThisInput = LaunchPad_Input();   // either button
-  if(ThisInput){
-    if((Time%100) == 0){ // 1 Hz
-      HC12data = HC12data^0x01; // toggle '0' to '1'
-      if(HC12data == 0x31){
-        Message = 1; // S1
-        Flag = 1;    // signal
-       }else{
-        Message = 0; // S0
-        Flag = 1;    // signal
-      }
-      UART1_OutChar(HC12data);
-    }
-  }
-  in = UART1_InCharNonBlock();
-  if(in){
-    switch(in){
-      case '0':
-        Message = 2; // R0
-        Flag = 1;    // signal
-        LaunchPad_Output(0); // off
-        break;
-      case '1':
-        Message = 3; // R1
-        Flag = 1;    // signal
-        LaunchPad_Output(BLUE);
-        break;
-    }
-  }
-  LEDOUT ^= 0x01;       // toggle P1.0
-}
 
 void HC12_ReadAllInput(void){uint8_t in;
 // flush receiver buffer
@@ -161,10 +131,102 @@ void HC12_Init(uint32_t baud){
   //************ configuration ended***********************
   printf("\nRF_XMT initialization done\n");
 }
+
+
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+#define trampoline  2
+#define MY_ID       1
+#define DEST_ID     3
+//********SysTick_Handler*****************
+// ISR for SysTick timer, runs every 10ms.
+// Trampoline for selecting handler.
+// Inputs: none
+// Outputs: none
+void SysTick_Handler(void) {
+  switch (trampoline) {
+    case 0:
+      SysTick_Handler_1();
+      break;
+    case 1:
+      SysTick_Handler_5E();
+      break;
+    case 2:
+      SysTick_Handler_5F();
+      break;
+  }
+}
+
+//********Trampoline for selecting main*****************
+void main() {
+  switch (trampoline) {
+    case 0:
+      main_1();
+      break;
+    case 1:
+      main_5E();
+      break;
+    case 2:
+      main_5F();
+      break;
+  }
+}
+
+
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+void SysTick_Handler_1(void){
+  uint8_t in;
+
+  LEDOUT ^= 0x01;       // toggle P1.0
+  LEDOUT ^= 0x01;       // toggle P1.0
+
+  Time = Time + 1;
+  uint8_t ThisInput = LaunchPad_Input();   // either button
+  if(ThisInput){
+    if((Time%100) == 0){ // 1 Hz
+      P4->OUT ^= 0x01;      // toggle P4.0
+      P4->OUT ^= 0x01;      // toggle P4.0
+      HC12data = HC12data^0x01; // toggle '0' to '1'
+      if(HC12data == 0x31){
+        Message = 1; // S1
+        Flag = 1;    // signal
+       }else{
+        Message = 0; // S0
+        Flag = 1;    // signal
+      }
+      UART1_OutChar(HC12data);
+      P4->OUT ^= 0x01;      // toggle P4.0
+    }
+  }
+  in = UART1_InCharNonBlock();
+  if(in){
+    P4->OUT ^= 0x01;      // toggle P4.0
+    P4->OUT ^= 0x01;      // toggle P4.0
+    switch(in){
+      case '0':
+        Message = 2; // R0
+        Flag = 1;    // signal
+        LaunchPad_Output(0); // off
+        break;
+      case '1':
+        Message = 3; // R1
+        Flag = 1;    // signal
+        LaunchPad_Output(BLUE);
+        break;
+    }
+    P4->OUT ^= 0x01;      // toggle P4.0
+  }
+
+  LEDOUT ^= 0x01;       // toggle P1.0
+}
+
 /**
  * main.c
  */
-void main(void){int num=0;
+void main_1(void){int num=0;
   Clock_Init48MHz();        // running on crystal
   Time = MainCount = 0;
   SysTick_Init(480000,2);   // set up SysTick for 100 Hz interrupts
@@ -216,3 +278,299 @@ void main(void){int num=0;
   }
 }
 
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+uint8_t KnownSequence[] = {'A', 'B', 'C', 'D', 'E'};
+uint8_t InputSequence[5];
+
+//********SysTick_Handler*****************
+// ISR for SysTick timer.
+// Checks UART1 for communication through HC12 wireless module.
+// Sends data when button is pressed.
+// Inputs: none
+// Outputs: none
+void SysTick_Handler_5E(void) {
+  uint8_t i, j;
+  uint8_t in;
+
+  LEDOUT ^= 0x01;       // toggle P1.0
+  LEDOUT ^= 0x01;       // toggle P1.0
+  Time = Time + 1;
+
+  // Clear input message from previous run
+  InputSequence[0] = '\0';
+  InputSequence[1] = '\0';
+  InputSequence[2] = '\0';
+  InputSequence[3] = '\0';
+  InputSequence[4] = '\0';
+
+  // Send data on button press at a rate of 1 Hz
+  uint8_t ThisInput = LaunchPad_Input();   // either button
+  if (ThisInput) {
+    if ((Time % 100) == 0) {  // 1 Hz
+      Message = 1;
+      Flag = 1;    // signal
+      for (i = 0; i < sizeof(KnownSequence); i++) {
+        UART1_OutChar(KnownSequence[i]);
+      }
+    }
+  }
+
+  // Receive data and compare to known sequence
+  in = UART1_InCharNonBlock();
+  j = 0;
+  while (in) {
+    Message = 2;
+    Flag = 1;
+    InputSequence[j] = in;
+    in = UART1_InCharNonBlock();
+    j = (j + 1) % 5;
+  }
+  // Check for correct sequence received
+  if (Flag && Message == 2) {
+    if (memcmp(KnownSequence, InputSequence, 5) != 0)
+      Message = 3;
+      while (UART1_InCharNonBlock()) {}
+  }
+
+  LEDOUT ^= 0x01;       // toggle P1.0
+}
+
+//********Main_5E*****************
+// Entry point of the application for section 5E
+// Inputs: none
+// Outputs: none
+void main_5E(void) {
+  int num = -1;
+  DisableInterrupts();  // Prevent interrupts during initialization
+
+  // Standard initialization sequence
+  Clock_Init48MHz();        // running on crystal
+  SysTick_Init(480000,2);   // set up SysTick for 100 Hz interrupts
+  LaunchPad_Init();         // P1.0 is red LED on LaunchPad
+  UART0_Initprintf();       // serial port to PC for debugging
+  SSD1306_Init(SSD1306_SWITCHCAPVCC);
+
+  // Print initial message to display
+  SSD1306_OutClear();
+  SSD1306_SetCursor(0,0);
+  SSD1306_OutString("----- ECE382V ------\n");
+  SSD1306_OutString(" Lab 1\n");
+  SSD1306_OutString(" Section 5E\n");
+  EnableInterrupts();
+  printf("\nSection 5E\n");
+
+  // Initialize wireless module (may take some time)
+  HC12_Init(UART1_BAUD_9600);
+  SSD1306_OutString(" RF_XMT init done\n");
+  SSD1306_OutString("\nHold switch for 1s\n");
+
+  EnableInterrupts();
+
+  // Application, loop forever
+  while (1) {
+    WaitForInterrupt();
+    MainCount++;
+
+    if (Flag) {   // wait on semaphore
+      num++;
+      if (num == 1) {
+        SSD1306_OutClear(); // Clear display
+      }
+
+      Flag = 0;   // Data transmission has been handled
+      SSD1306_OutUDec16(num);
+      SSD1306_OutChar(' ');
+      switch (Message) {
+        case 1:   // Send sequence
+          printf("S\n");
+          SSD1306_OutString("S               \n");
+          break;
+        case 2:
+          printf("R\n");
+          SSD1306_OutString("R ");
+          SSD1306_OutChar(InputSequence[0]);
+          SSD1306_OutChar(InputSequence[1]);
+          SSD1306_OutChar(InputSequence[2]);
+          SSD1306_OutChar(InputSequence[3]);
+          SSD1306_OutChar(InputSequence[4]);
+          SSD1306_OutString("\n");
+          break;
+        case 3:
+          printf("L\n");
+          SSD1306_OutString("L ");
+          SSD1306_OutChar(InputSequence[0]);
+          SSD1306_OutChar(InputSequence[1]);
+          SSD1306_OutChar(InputSequence[2]);
+          SSD1306_OutChar(InputSequence[3]);
+          SSD1306_OutChar(InputSequence[4]);
+          SSD1306_OutString("\n");
+          break;
+      }
+    }
+  }
+}
+
+
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+uint32_t TIMER_FREQ = 24000000;
+uint32_t MICROSEC_UNITS = 2;
+uint32_t INTERRUPT_RATE_TIMER = 9600;   // 9.6kHz
+message_t OutPacket;
+
+
+//********SysTick_Handler*****************
+// ISR for SysTick timer.
+// Sends data when button is pressed.
+// Inputs: none
+// Outputs: none
+void SysTick_Handler_5F(void) {
+  Time = Time + 1;
+
+  // Send data on button press
+  uint8_t ThisInput = LaunchPad_Input();   // either button
+  if (ThisInput) {
+    if ((Time % 100) == 0) {  // 1 Hz at a time
+      // Only send one packet
+      if (G_UNSENT_BYTES > 0) {   // Message already in transit
+        return;
+      }
+      else {
+        G_UNSENT_BYTES = sizeof(OutPacket);  // Length of data + header info
+        memcpy(G_SEND_BUFF, &OutPacket, G_UNSENT_BYTES); 
+        G_SEND_PTR = G_SEND_BUFF;
+      }
+    }
+  }
+}
+
+//********PeriodicTask*****************
+// ISR for TimerA0.
+// Checks UART1 for communication through HC12 wireless module.
+// Runs at 9.6KHz.
+// Inputs: none
+// Outputs: none
+void PeriodicTask_5F(void) {
+  uint8_t in, len, error;
+
+  // Check for outgoing data that needs to be sent out
+  if (G_UNSENT_BYTES > 0) {
+    LaunchPad_Output(BLUE);
+
+    UART1_OutChar(*G_SEND_PTR);
+    G_SEND_PTR++;
+    G_UNSENT_BYTES--;
+  }
+
+  // Check UART1 for incoming data
+  if (UART1_InStatus()) {
+    in = UART1_InChar();
+    // Check recv buffer for incoming data that needs to be received
+    if (G_UNRECV_BYTES > 0) {
+      LaunchPad_Output(GREEN);
+      *G_RECV_PTR = in;
+      G_UNRECV_BYTES--;
+
+      // Once recv buffer reaches 0, check for error
+      if (G_UNRECV_BYTES == 0) {
+        // Calculate error from msg
+        error = G_RECV_BUFF[0];
+        for (int i = 1; i < len; i++) {
+          error = error ^ G_RECV_BUFF[i];
+        }
+        // Compare to transmitted error
+        if (error != in) {
+          LaunchPad_Output(RED);
+        }
+      }
+
+      G_RECV_PTR++;
+    }
+    else {
+      // Parse incoming message and set recv buffer
+      if (in == HEADER) {       // Check correct header
+        in = UART1_InChar();
+        if (in == MY_ID)  {     // Check message is for me
+          len = UART1_InChar();    // Retrieve length
+          G_UNRECV_BYTES = sizeof(message_t) - 3;   // Size of message - header - address
+          G_RECV_PTR = G_RECV_BUFF;   // Pointer to start of buffer
+        }
+        else {
+          while (UART1_InCharNonBlock()) {} // Clear message
+        }
+      }
+    }
+  }
+  // Check if incoming data was lost
+  else {
+    // Recv buffer is not empty, lost some data
+    if (G_UNRECV_BYTES > 0) {
+      LaunchPad_Output(RED);
+      // Timeout for 1 sec
+      if (++RX_TIMEOUT_CNT == RX_TIMEOUT) {
+        G_UNRECV_BYTES = 0;   // Reset buffer
+      }
+    }
+    else { //TODO This logic is not 100% correct because this should not happen when we are sending.
+      RX_TIMEOUT_CNT = 0;
+      LaunchPad_Output(0);
+    }
+  }
+}
+
+//********Main_5F*****************
+// Entry point of the application for section 5F
+// Inputs: none
+// Outputs: none
+void main_5F(void) {
+  DisableInterrupts();  // Prevent interrupts during initialization
+
+  // Standard initialization sequence
+  Clock_Init48MHz();        // running on crystal
+  SysTick_Init(480000, 1);  // SysTick interrupts at 1KHz, priority 1
+  LaunchPad_Init();         // P1.0 is red LED on LaunchPad
+  UART0_Initprintf();       // serial port to PC for debugging
+  SSD1306_Init(SSD1306_SWITCHCAPVCC);
+
+  // Print initial message to display
+  SSD1306_OutClear();
+  SSD1306_SetCursor(0,0);
+  SSD1306_OutString("----- ECE382V ------\n");
+  SSD1306_OutString(" Lab 1\n");
+  SSD1306_OutString(" Section 5F\n");
+  EnableInterrupts();
+  printf("\nSection 5F\n");
+
+  // Initialize wireless module (may take some time)
+  HC12_Init(UART1_BAUD_9600);
+  SSD1306_OutString(" RF_XMT init done\n");
+  SSD1306_OutString("\nHold switch for 1s\n");
+
+  TimerA0_Init(&PeriodicTask_5F, 
+    (TIMER_FREQ / MICROSEC_UNITS) / INTERRUPT_RATE_TIMER);   // TimerA0 interrupts at 9.6KHz, priority 2
+  //TODO crcInit();
+
+  // Create output message
+  OutPacket.header = HEADER;
+  OutPacket.address = DEST_ID;
+  OutPacket.length = sizeof(OutMessage);
+  memcpy(OutPacket.data, OutMessage, OutPacket.length);
+  uint8_t i = 1, error;  // Calculate error
+  error = OutMessage[0];
+  while (i < OutPacket.length) {
+    error = error ^ OutPacket.data[i];
+    i++;
+  }
+  OutPacket.error = error;
+
+  EnableInterrupts();
+
+  // Application, loop forever
+  while (1) {
+    WaitForInterrupt();
+    MainCount++;
+  }
+}

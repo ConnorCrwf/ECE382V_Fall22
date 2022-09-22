@@ -32,6 +32,68 @@ void (*PeriodicEvents[NUMPERIODIC])(void);      // periodic user functions
 void DummyEventThread(void){};
 void static runperiodicevents(void);
 
+// ***************** PeriodicTask_InitB ****************
+// Activate 16-bit Timer A1 interrupts to run user task periodically
+// assumes SMCLK is 12MHz, using divide by 24, 500kHz/65536=7.6 Hz
+// Input:  task is a pointer to a user function
+//         freq is number of interrupts per second
+//           8 Hz to 10 kHz
+//         priority is a number 0 to 6
+// Outputs: none
+// comment: it is accurate if 500000/freq is an integer
+void (*PeriodicTaskB)(void);   // user function
+void PeriodicTask_InitB(void(*task)(void), uint32_t freq, uint8_t priority){
+  if((freq < 8) || (freq > 10000)){
+    return;                        // invalid input
+  }
+  if(priority > 6){
+    priority = 6;
+  }
+  PeriodicTaskB = task;  // user function
+  TIMER_A1->CTL &= ~0x0030;     // halt Timer A1
+  // bits15-10=XXXXXX, reserved
+  // bits9-8=10,       clock source to SMCLK
+  // bits7-6=10,       input clock divider /4
+  // bits5-4=00,       stop mode
+  // bit3=X,           reserved
+  // bit2=0,           set this bit to clear
+  // bit1=0,           no interrupt on timer
+  // bit0=0,           clear interrupt pending
+  TIMER_A1->CTL = 0x0280;
+  TIMER_A1->EX0 = 0x0005;    // configure for input clock divider /6
+  // bits15-14=00,     no capture mode
+  // bits13-12=XX,     capture/compare input select
+  // bit11=X,          synchronize capture source
+  // bit10=X,          synchronized capture/compare input
+  // bit9=X,           reserved
+  // bit8=0,           compare mode
+  // bits7-5=XXX,      output mode
+  // bit4=1,           enable capture/compare interrupt on CCIFG
+  // bit3=X,           read capture/compare input from here
+  // bit2=0,           output this value in output mode 0
+  // bit1=X,           capture overflow status
+  // bit0=0,           clear capture/compare interrupt pending
+  TIMER_A1->CCTL[0] = 0x0010;
+  TIMER_A1->CCR[0] = (500000/freq) - 1;  // compare match value
+// interrupts enabled in the main program after all devices initialized
+  NVIC->IP[2] = (NVIC->IP[2]&0xFF00FFFF)|(priority<<21);
+  NVIC->ISER[0] = 0x00000400; // enable interrupt 10 in NVIC
+  TIMER_A1->CTL |= 0x0014;        // reset and start Timer A1 in up mode
+}
+
+// ------------PeriodicTask_StopB------------
+// Deactivate the interrupt running a user task periodically.
+// Input: none
+// Output: none
+void PeriodicTask_StopB(void){
+  TIMER_A1->CTL &= ~0x0030;           // halt Timer A1
+  NVIC->ISER[0] = 0x00000400;     // disable interrupt 10 in NVIC
+}
+
+void TA1_0_IRQHandler(void){
+  TIMER_A1->CCTL[0] &= ~0x0001;          // acknowledge capture/compare interrupt TA1_0
+  (*PeriodicTaskB)();           // execute user task
+}
 // ******** OS_Init ************
 // Initialize operating system, disable interrupts
 // Initialize OS controlled I/O: periodic interrupt, bus clock as fast as possible
@@ -40,14 +102,13 @@ void static runperiodicevents(void);
 // Outputs: none
 void OS_Init(void){int i;
   DisableInterrupts();
-  BSP_Clock_InitFastest();// set processor clock to fastest speed
   EventThreadIndex = 0;
   for(i=0; i<NUMPERIODIC; i=i+1){
     EventThreadPeriodsReload[i] = 0; // reload value of 0 means unused
     EventThreadPeriods[i] = 0;
     PeriodicEvents[i] = DummyEventThread;
   }
-  BSP_PeriodicTask_InitB(&runperiodicevents, 1000, 0);
+  PeriodicTask_InitB(&runperiodicevents, 1000, 0);
 }
 
 void SetInitialStack(int i){

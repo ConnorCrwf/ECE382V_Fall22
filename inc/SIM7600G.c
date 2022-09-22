@@ -3,7 +3,7 @@
  *
 */
 // Pranav Rama, Daniel Valvano, and Jonathan Valvano
-// August 25, 2022
+// September 14, 2022
 
 /* 
 
@@ -40,40 +40,39 @@ policies, either expressed or implied, of the FreeBSD Project.
 // built-in LED1 connected to P1.0
 // P1.0, P2.0 are an output to profiling scope/logic analyzer
 // SIM7600G pin connection
-
-
 // TX      , MSP432 UCA2RXD P3.2
 // RX      , MSP432 UCA2TXD P3.3
+// 5V      , LaunchPad 5V
+// GND     , LaunchPad GND
 
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "msp.h"
-#include "..\inc\SIM7600G.h"
-#include "..\inc\UART0.h"
-#include "..\inc\UART1.h"
-#include "..\inc\Clock.h"
-#define LEDOUT (*((volatile uint8_t *)(0x42098040)))
-// P3->OUT is 8-bit port at 0x4000.4C22
-// I/O address be 0x4000.0000+n, and let b represent the bit 0 to 7.
-// n=0x4C22, b=0
-// bit banded address is 0x4200.0000 + 32*n + 4*b
-#define RST (*((volatile uint8_t *)(0x42098440)))
-#define SIM7600GDELAY 40
+#include "SIM7600G.h"
+#include "UART0.h"
+#include "UART1.h"
+#include "Clock.h"
+#define SIM7600GDELAY 1000 //ms
 #ifdef SIM7600G_DEBUG
 #define DebugOutString(x) UART0_OutString((char *)x)
 #define DebugOutChar UART0_OutChar
 #define DebugOutUHex2 UART0_OutUHex2
+#define DebugOutUDec UART0_OutUDec
 #else
 #define DebugOutString(x)
 #define DebugOutChar(x)
 #define DebugOutHex2(x)
+#define DebugOutUDec(x)
 #endif
 
 uint8_t replybuffer[255];  ///< buffer for holding replies from the module
-uint8_t const useragent[] = "FONA";
+uint8_t const useragent[] = "SIM7600G";
 uint8_t const ok_reply[] = "OK";
+void SIM7600G_SetSMSStorage(int place);
+
 // *************low level private functions **************
 /**
  * @brief Read all available serial input to flush pending data.
@@ -82,7 +81,7 @@ uint8_t const ok_reply[] = "OK";
 void flushInput(void){uint8_t in;
 // flush receiver buffer
 uint32_t timeoutloop = 0;
-  while(timeoutloop++ < SIM7600GDELAY) {
+  while(timeoutloop++ < SIM7600GDELAY){
     in = UART1_InCharNonBlock();
     while(in){
       in = UART1_InCharNonBlock();
@@ -96,7 +95,7 @@ uint32_t timeoutloop = 0;
 void readAllInput(void){uint8_t in;
 // flush receiver buffer
 uint32_t timeoutloop = 0;
-  while(timeoutloop++ < SIM7600GDELAY) {
+  while(timeoutloop++ < SIM7600GDELAY){
     in = UART1_InCharNonBlock();
     while(in){
       DebugOutChar(in); //
@@ -115,13 +114,13 @@ uint32_t timeoutloop = 0;
  * @param read_length The number of bytes to return
  * @return uint16_t The number of bytes read
  */
-uint32_t readRaw(uint16_t read_length) {uint8_t in;
+uint32_t readRaw(uint32_t read_length){uint8_t in;
   uint32_t idx = 0;
 
-  while (read_length && (idx < sizeof(replybuffer) - 1)) {
+  while (read_length && (idx < sizeof(replybuffer) - 1)){
     in = UART1_InCharNonBlock();
 
-    if (in) {
+    if(in){
       replybuffer[idx] = in;
       idx++;
       read_length--;
@@ -140,24 +139,24 @@ uint32_t readRaw(uint16_t read_length) {uint8_t in;
  * newline
  * @return uint8_t the number of bytes read
  */
-uint8_t readline(uint32_t timeout, int multiline) {uint8_t in;
-  uint16_t replyidx = 0;
+uint8_t readline(uint32_t timeout, int multiline){uint8_t in;
+  uint32_t replyidx = 0;
 
-  while (timeout--) {
-    if (replyidx >= 254) {
+  while (timeout--){
+    if(replyidx >= 254){
       // DEBUG_PRINTLN(F("SPACE"));
       break;
     }
 
-    while(in = UART1_InCharNonBlock()) {
-      if (in == '\r'){
+    while(in = UART1_InCharNonBlock()){
+      if(in == '\r'){
         continue;
       }
-      if(in == 0x0A) {
-        if (replyidx == 0){// the first 0x0A is ignored
+      if(in == 0x0A){
+        if(replyidx == 0){// the first 0x0A is ignored
           continue;
         }
-        if(!multiline) {
+        if(!multiline){
           timeout = 0; // the second 0x0A is the end of the line
           break;
         }
@@ -168,7 +167,7 @@ uint8_t readline(uint32_t timeout, int multiline) {uint8_t in;
       replyidx++;
     }
 
-    if(timeout == 0) {
+    if(timeout == 0){
       break;
     }
   //  Clock_Delay1ms(1);
@@ -192,7 +191,7 @@ uint8_t readline(uint32_t timeout, int multiline) {uint8_t in;
  * @param timeout Timeout for reading a  response
  * @return uint8_t The response length
  */
-uint8_t getReply(uint8_t *send, uint32_t timeout) {
+uint8_t getReply(uint8_t *send, uint32_t timeout){
   flushInput();
 
   DebugOutString("\n\r---> ");
@@ -207,8 +206,8 @@ uint8_t getReply(uint8_t *send, uint32_t timeout) {
 
   return l;
 }
-int sendCheckReply(uint8_t *send, const uint8_t *reply, uint32_t timeout) {
-  if (!getReply(send, timeout))
+int sendCheckReply(uint8_t *send, const uint8_t *reply, uint32_t timeout){
+  if(!getReply(send, timeout))
     return 0;
   return (strcmp((const char *)replybuffer, (const char *)reply) == 0);
 }
@@ -220,59 +219,72 @@ void SIM7600GCommand(uint8_t *pt){
 // *************high level public functions **************
 
 void SIM7600G_Reset(void){ // reset 
- 
+  SIM7600GCommand("AT+CRESET=?\r\n");
 }
 
+void SIM7600G_PowerDown(void){ // power down
+  SIM7600GCommand("AT+CPOF\r\n");
+}
 
-void SIM7600G_Init(uint32_t n){
+void SIM7600G_Init(int place){
 // baud choices defined in UART1.h
-  P3->SEL0 &= ~0x01;    // P3.0 GPIO output to RST
-  P3->SEL1 &= ~0x01;    // configure P3.0 as GPIO
-  P3->DIR |= 0x01;      // make P3.0 out
-  //
-  // add code to initialize GPIO input for RI
-  //
-  UART1_InitB(n);       // serial port to Fona
-  //************ configure the Fona module**********************
+  UART1_InitB(UART1_BAUD_115200);       // serial port to SIM7600G
+  //************ configure the SIM7600G module**********************
   SIM7600G_Reset();
-  SIM7600GCommand("AT\n");        // initialize auto-baud'er
-  SIM7600GCommand("AT\n");        // initialize auto-baud'er
-  SIM7600GCommand("ATE1\n");      // Turn on echo
-  SIM7600GCommand("AT+CMEE=2\n"); // Turn on verbose errors
-#ifdef FONA_DEBUG
-  SIM7600GCommand("ATI\n");       // Get the module name and revision
-  SIM7600GCommand("AT+CCID\n");   // Report CCID for device
-  SIM7600GCommand("AT+COPS?\n");  // Check that you're connected to the network
-  SIM7600GCommand("AT+CSQ\n");    // Check the 'signal strength' - the first # is dB strength,
-  SIM7600GCommand("AT+CBC\n");    // will return the lipo battery state.
+  SIM7600GCommand("AT\r");        // initialize auto-baud'er
+  SIM7600GCommand("AT\r");        // initialize auto-baud'er
+  SIM7600GCommand("ATE1\r");      // Turn on echo
+  SIM7600GCommand("AT+CMEE=2\r"); // Turn on verbose errors
+#ifdef SIM7600G_DEBUG
+  SIM7600GCommand("ATI\r");       // Get the module name and revision
+  SIM7600GCommand("AT+CCID\r");   // Report CCID for device
+  SIM7600GCommand("AT+COPS?\r");  // Check that you're connected to the network
+  SIM7600GCommand("AT+CSQ\r");    // Check the 'signal strength' - the first # is dB strength,
+  SIM7600GCommand("AT+CBC\r");    // will return the lipo battery state.
   // The second number is the % full (in this case its 92%) and
   // the third number is the actual voltage in mV
-  SIM7600GCommand("AT+CPMS=?\n"); // list of supported SMS memory devices
-  SIM7600GCommand("AT+CPMS?\n");  // SMS messages
-  SIM7600GCommand("AT+CSMS=?\n"); // list of supported SMS services
-  SIM7600GCommand("AT+CSMS?\n");  // SMS service
-  SIM7600GCommand("AT+CFGRI?\n"); // check RI configuration service
+  SIM7600GCommand("AT+CPMS=?\r"); // list of supported SMS memory devices
+  SIM7600GCommand("AT+CPMS?\r");  // SMS messages
+  SIM7600GCommand("AT+CSMS=?\r"); // list of supported SMS services
+  SIM7600GCommand("AT+CSMS?\r");  // SMS service
+  SIM7600GCommand("AT+CFGRI?\r"); // check RI configuration service
 #endif
-  SIM7600GCommand("ATE0\n");      // Turn off echo
+  SIM7600GCommand("ATE0\r");      // Turn off echo
 
-  Clock_Delay1ms(200);
+  SIM7600G_SetSMSStorage(place); //Set storage to flash since it has greater capacity
+
+  Clock_Delay1ms(1000);
+  readAllInput(); // remove any buffered input
+  //************ configuration ended***********************
+}
+void SIM7600G_Restart(int place){
+  readAllInput(); // remove any buffered input
+  //************ configure the SIM7600G module**********************
+  SIM7600G_Reset();
+  SIM7600GCommand("AT\r");        // initialize auto-baud'er
+  SIM7600GCommand("AT\r");        // initialize auto-baud'er
+  SIM7600GCommand("ATE1\r");      // Turn on echo
+  SIM7600GCommand("AT+CMEE=2\r"); // Turn on verbose errors
+  SIM7600GCommand("ATE0\r");      // Turn off echo
+  SIM7600G_SetSMSStorage(place); //Set storage to flash since it has greater capacity
+  Clock_Delay1ms(1000);
   readAllInput(); // remove any buffered input
   //************ configuration ended***********************
 }
 
 // Set the preferred SMS storage.
-//  SMS_SIM = 1 for storage on the SIM.
-//  SMS_FONA= 0 for storage on the FONA chip
-void Fona_SetSMSStorage(int place){
+//  SMS_SIM = 1 for storage on the SIM (small size).
+//  SMS_SIM7600G= 0 for storage on the SIM7600G chip, flash, (large size)
+void SIM7600G_SetSMSStorage(int place){
   if(place){
-    SIM7600GCommand("AT+CPMS=\"SM\",\"SM\",\"SM\"\n"); // set SMS memory devices to SIM card
+    SIM7600GCommand("AT+CPMS=\"SM\",\"SM\",\"SM\"\r"); // set SMS memory devices to SIM card
   }else{
-    SIM7600GCommand("AT+CPMS=\"ME\",\"ME\",\"ME\"\n"); // set SMS memory devices to FONA chip
+    SIM7600GCommand("AT+CPMS=\"ME\",\"ME\",\"ME\"\r"); // set SMS memory devices to SIM7600G chip
   }
-  SIM7600GCommand("AT+CSMS?\n");  // check SMS service
+  SIM7600GCommand("AT+CSMS?\r");  // check SMS service storage space
 }
 
-void Fona_SetSMSInterrupt(int n){
+void SIM7600G_SetSMSInterrupt(int n){
     // configure RI pin
   if(n == 0){
     SIM7600GCommand("AT+CFGRI=0\n"); // off
@@ -285,12 +297,61 @@ void Fona_SetSMSInterrupt(int n){
 }
 
 
-int32_t Fona_GetNumSMS(void){
-    // Get the number of SMS messages
-    // "AT+CMGF=1"  get into text mode
-    // "AT+CPMS?" ask how many sms are stored
-    // parse response
-  return -1;
+int32_t SIM7600G_GetNumSMS(void){
+  // Get the number of SMS messages
+  // "AT+CMGF=1"  get into text mode
+  // "AT+CPMS?" ask how many sms are stored
+  // parse response
+
+  if(!sendCheckReply((uint8_t *)"AT+CMGF=1\r", ok_reply,5000)){
+    DebugOutString("AT+CMGF=1 fail\n");
+    return 0; // fail
+  }
+  uint8_t sendcmd[30] = "AT+CPMS?\r";
+
+  if(!getReply(sendcmd, 5000)){
+    DebugOutString("AT+CPMS fail\n");
+    return 0; // fail
+  }
+
+  char* message_received = strstr((char *)replybuffer, "+CPMS");
+  if(message_received == 0){
+    return 0; // fail
+  }
+
+  char* pt = strtok (message_received,",");
+  if(pt != NULL){
+    pt = strtok (NULL, ",");
+  }
+
+  else{
+    DebugOutString("AT+CPMS unexpected response; fail\n");
+    return 0;
+  }
+
+  int num_messages = 0;
+  if(pt == NULL){
+    DebugOutString("AT+CPMS unexpected response; fail\n");
+    return 0;
+  }
+  else{
+    num_messages = atoi(pt);
+  }
+
+  readline(1000,1); // read OK
+
+  message_received = strstr((char *)replybuffer, "OK");
+
+  if(message_received == 0){
+    return 0; // fail
+  }
+  //Only print out and return success if whole transaction including OK receive was complete
+  else{
+    DebugOutString("Num messages = ");
+    DebugOutUDec(num_messages);
+    DebugOutString("\n\r");
+    return num_messages; // success
+  }
 }
 
 // Reading SMS's is a bit involved so we don't use helpers that may cause delays
@@ -299,100 +360,230 @@ int32_t Fona_GetNumSMS(void){
 /**
  * @brief Read an SMS message into a provided buffer
  *
- * @param message_index The SMS message index to retrieve
- * @param smsbuff SMS message buffer
- * @param maxlen The maximum read length
- * @param readlen The length read
+ * @param message_index The SMS message index to retrieve, 0 to 255
+ * @param smsbuff       Pointer to empty buffer into which message will be filled
+ * @param maxlen        The maximum read length (size of smsbuff)
+ * @param readlen       The length, number of characters read
  * @return 1: success, 0: failure
  */
-int Fona_ReadSMS(uint32_t message_index, char *smsbuff,
+int SIM7600G_ReadSMS(uint32_t message_index, char *smsbuff,
                             uint32_t maxlen, uint32_t *readlen){
 
-  return 0; // fail
+  if(message_index > 255){
+    return 0;
+  }
+  // select text format (not PDU)
+  if(!sendCheckReply((uint8_t *)"AT+CMGF=1\r", ok_reply,5000)){
+    DebugOutString("AT+CMGF=1 fail\n");
+    return 0; // fail
+  }
+  uint8_t sendcmd[30] = "AT+CMGR=";
+  int temp_len = strlen((char*)sendcmd);
+  if(message_index >= 100){
+    sendcmd[temp_len++] = (uint8_t)(message_index/100+'0');
+    message_index = message_index/100;
+    sendcmd[temp_len++] = (uint8_t)(message_index/10+'0');
+    sendcmd[temp_len++] = (uint8_t)(message_index%10+'0');
+    sendcmd[temp_len] = '\r';
+  }else if(message_index >= 10){
+    sendcmd[temp_len++] = (uint8_t)(message_index/10+'0');
+    sendcmd[temp_len++] = (uint8_t)(message_index%10+'0');
+    sendcmd[temp_len] = '\r';
+  }else{
+    sendcmd[temp_len++] = (uint8_t)(message_index+'0');
+    sendcmd[temp_len] = '\r';
+  }
+  if(!getReply(sendcmd, 5000)){
+    DebugOutString("AT+CMGR fail\n");
+    return 0; // fail
+  }
+
+  char* message_received = strstr((char *)replybuffer, "+CMGR");
+  if(message_received == 0){
+    return 0; // fail
+  }
+
+  char actual_message[255];
+  readline(10000,0); // read the actual message, wait up to 10 seconds!!!
+  strcpy(actual_message, (char*)replybuffer);
+  if(actual_message == 0){
+    return 0; // fail
+  }
+
+  //Using multiline read here; looks a bit tricky to get the exact line position of "OK"
+  //since there could be other metadata between the actual message and OK
+  //metadata typically small and much less than 255 bytes
+  readline(1000,1); // read OK
+
+  message_received = strstr((char *)replybuffer, "OK");
+
+  if(message_received == 0){
+    return 0; // fail
+  }
+  //Only print out and return success if whole transaction including OK receive was complete
+  else{
+    DebugOutString(" Message received: ");
+    strncpy(smsbuff, actual_message, maxlen);
+    *readlen = strlen(smsbuff);
+    DebugOutString(actual_message);
+    DebugOutString("\n\r");
+    return 1; // success
+  }
 }
 
 /**
  * @brief Delete an SMS Message
  *
  * @param message_index The message to delete
- * @return true: success, false: failure
+ * @return 1: success, 0: failure
  */
-int Fona_DeleteSMS(uint8_t message_index){
-/*
-  if (!sendCheckReply(F("AT+CMGF=1"), ok_reply))
-    return false;
-  // read an sms
-  char sendbuff[12] = "AT+CMGD=000";
-  sendbuff[8] = (message_index / 100) + '0';
-  message_index %= 100;
-  sendbuff[9] = (message_index / 10) + '0';
-  message_index %= 10;
-  sendbuff[10] = message_index + '0';
+int SIM7600G_DeleteSMS(uint32_t message_index){
+    // select text format (not PDU)
+  if(!sendCheckReply("AT+CMGF=1\r", ok_reply, 5000))
+    return 0;
+  // delete an SMS
+  char sendbuff[14] = "AT+CMGD=000";
+  if(message_index >= 100){
+    sendbuff[8] = (message_index / 100) + '0';
+    message_index %= 100;
+    sendbuff[9] = (message_index / 10) + '0';
+    message_index %= 10;
+    sendbuff[10] = message_index + '0';
+    sendbuff[11] = ',';
+    sendbuff[12] = '0';
+    sendbuff[13] = '\r';
+  }else if(message_index >= 10){
+    sendbuff[8] = (message_index / 10) + '0';
+    message_index %= 10;
+    sendbuff[9] = message_index + '0';
+    sendbuff[10] = ',';
+    sendbuff[11] = '0';
+    sendbuff[12] = '\r';
+  }else{
+    sendbuff[8] = message_index + '0';
+    sendbuff[9] = ',';
+    sendbuff[10] = '0';
+    sendbuff[11] = '\r';
+  }
 
-  return sendCheckReply(sendbuff, ok_reply, 2000);
-*/
-  return 0;
+  int del_ret = sendCheckReply((uint8_t *)sendbuff, ok_reply, 2000);
+  if(del_ret == 0){
+      DebugOutString("Message delete failed \n\r");
+      return 0;
+  }
+  DebugOutString("Message successfully deleted \n\r");
+  return 1;
+
 }
 
 /**
- * @brief Retrieve the sender of the specified SMS message and copy it as a
- *    string to the sender buffer.  Up to senderlen characters of the sender
- * will be copied and a null terminator will be added if less than senderlen
+ * @brief Retrieve the sender phone number of the specified SMS message and
+ *    copy it as a string to the sender buffer.
+ *    Up to senderlen characters will be copied
+ *    and a null terminator will be added if less than senderlen
  *    characters are copied to the result.
  *
- * @param message_index The SMS message index to retrieve the sender for
- * @param sender Pointer to a buffer to fill with the sender
- * @param senderlen The maximum length to read
+ * @param message_index The SMS message index to retrieve the sender phone number
+ * @param sender        Pointer to an empty buffer into which to fill with the sender phone number
+ * @param senderlen     The maximum length to read (size of empty buffer)
  * @return 1: a result was successfully retrieved, 0: failure
  */
-int Fona_GetSMSSender(uint32_t message_index, char *sender,
+int SIM7600G_GetSMSSender(uint32_t message_index, char *sender,
                                  int senderlen){
-/* Adafruit_FONA.cpp C++ code
+  if(message_index > 255){
+    return 0;
+  }
+  if(!sendCheckReply((uint8_t *)"AT+CMGF=1\r", ok_reply,5000)){
+    DebugOutString("AT+CMGF=1 fail\n");
+    return 0; // fail
+  }
+  uint8_t sendcmd[30] = "AT+CMGR=";
+  int temp_len = strlen((char*)sendcmd);
+  if(message_index >= 100){
+    sendcmd[temp_len++] = (uint8_t)(message_index/100+'0');
+    message_index = message_index/100;
+    sendcmd[temp_len++] = (uint8_t)(message_index/10+'0');
+    sendcmd[temp_len++] = (uint8_t)(message_index%10+'0');
+    sendcmd[temp_len] = '\r';
+  }else if(message_index >= 10){
+    sendcmd[temp_len++] = (uint8_t)(message_index/10+'0');
+    sendcmd[temp_len++] = (uint8_t)(message_index%10+'0');
+    sendcmd[temp_len] = '\r';
+  }else{
+    sendcmd[temp_len++] = (uint8_t)(message_index+48);
+    sendcmd[temp_len] = '\r';
+  }
 
-  // Ensure text mode and all text mode parameters are sent.
-  if (!sendCheckReply(F("AT+CMGF=1"), ok_reply))
-    return false;
-  if (!sendCheckReply(F("AT+CSDH=1"), ok_reply))
-    return false;
+  if(!getReply(sendcmd, 5000)){
+    DebugOutString("AT+CMGR fail\n");
+    return 0; // fail
+  }
 
-  DEBUG_PRINT(F("AT+CMGR="));
-  DEBUG_PRINTLN(message_index);
+  char temp_buffer[255];
+  char* message_received = strstr((char *)replybuffer, "+CMGR");
+  if(message_received == 0){
+    return 0; // fail
+  }
 
-  // Send command to retrieve SMS message and parse a line of response.
-  mySerial->print(F("AT+CMGR="));
-  mySerial->println(message_index);
-  readline(1000);
+  char* pt = strtok (message_received,",");
+  if(pt != NULL){
+    pt = strtok (NULL, ",");
+  }
 
-  DEBUG_PRINTLN(replybuffer);
+  else{
+    DebugOutString("AT+CMGR unexpected response; fail\n");
+    return 0;
+  }
 
-  // Parse the second field in the response.
-  bool result = parseReplyQuoted(F("+CMGR:"), sender, senderlen, ',', 1);
-  // Drop any remaining data from the response.
-  flushInput();
-  return result;
-  */
-  return 0; // fail
+  if(pt == NULL){
+    DebugOutString("AT+CMGR unexpected response; fail\n");
+    return 0;
+  }
+
+  strcpy(temp_buffer, pt);
+
+  //Using multiline read here; looks a bit tricky to get the exact line position of "OK"
+  //since there could be other metadata between the actual message and OK
+  //metadata typically small and much less than 255 bytes
+
+  readline(1000,1); // read OK
+
+  message_received = strstr((char *)replybuffer, "OK");
+
+  if(message_received == 0){
+    return 0; // fail
+  }
+  //Only print out and return success if whole transaction including OK receive was complete
+  else{
+    strncpy(sender, temp_buffer, senderlen);
+    DebugOutString("Sender of requested message id: ");
+    DebugOutString(sender);
+    DebugOutString("\n\r");
+    return 1; // success
+  }
 }
 
 
 /**
  * @brief Send an SMS Message from a buffer provided
  *
- * @param phone     The SMS address buffer,
+ * @param phone     The SMS address buffer
  * @param message   The SMS message buffer
  * @return true: success, false: failure
  */
-int Fona_SendSMS(uint8_t *phone, uint8_t *message) {
-  if (!sendCheckReply((uint8_t *)"AT+CMGF=1", ok_reply,5000)){
+int SIM7600G_SendSMS(uint8_t *phone, uint8_t *message){
+  if(!sendCheckReply((uint8_t *)"AT+CMGF=1\r", ok_reply,5000)){
     DebugOutString("AT+CMGF=1 fail\n");
     return 0; // fail
   }
   uint8_t sendcmd[30] = "AT+CMGS=\"";
   strncpy((char *)(sendcmd + 9), (char *)phone,
-          30 - 9 - 2); // 9 bytes beginning, 2 bytes for close quote + null
-  sendcmd[strlen((char *)sendcmd)] = '\"';
+          30 - 9 - 3); // 9 bytes beginning, 2 bytes for close quote + LF + null
+  int temp_length = strlen((char *)sendcmd);
+  sendcmd[temp_length++] = '\"';
+  sendcmd[temp_length] = '\r';
 
-  if (!sendCheckReply(sendcmd, "> ",1000)){
+  if(!sendCheckReply(sendcmd, "> ",1000)){
    DebugOutString(sendcmd);
    DebugOutString(" fail\n ");
    return 0; // fail
@@ -406,12 +597,12 @@ int Fona_SendSMS(uint8_t *phone, uint8_t *message) {
   DebugOutString("^Z\n");
 
   readline(10000,0); // read the +CMGS reply, wait up to 10 seconds!!!
-  if (strstr((char *)replybuffer, "+CMGS") == 0) {
+  if(strstr((char *)replybuffer, "+CMGS") == 0){
     return 0; // fail
   }
   readline(1000,0); // read OK
 
-  if (strcmp((char *)replybuffer, "OK") != 0) {
+  if(strcmp((char *)replybuffer, "OK") != 0){
     return 0; // fail
   }
   return 1; // success
