@@ -489,7 +489,7 @@ void Task7(void){
     Count7++;
     AP_BackgroundProcess();
     if(Send0Flag){
-      AP_SendNotification(0);
+      AP_SendNotification(0);   // Sends notification characteristic to index 0.
       Send0Flag=0;
     }
     WaitForInterrupt();
@@ -538,12 +538,12 @@ void Bluetooth_WritePlotState(void){ // called on a SNP Characteristic Write Ind
   BSP_Buzzer_Set(512);           // beep until next call of task3
   ReDrawAxes = 1;                // redraw axes on next call of display task
 }
-void Bluetooth_Steps(void){ // called on SNP CCCD Updated Indication
-  OutValue("\n\rCCCD Steps=",AP_GetNotifyCCCD(0));
-}
-void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
-  OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(1));
-}
+// void Bluetooth_Steps(void){ // called on SNP CCCD Updated Indication
+//   OutValue("\n\rCCCD Steps=",AP_GetNotifyCCCD(0));
+// }
+// void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
+//   OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(0));
+// }
 void Bluetooth_LED(void){
   LaunchPad_Output(LED);  // set LEDs with bottom bits
   OutValue("\n\rWordData=",LED);
@@ -568,7 +568,7 @@ void Bluetooth_Init(void){volatile int r;
   Switch1 = 0; 
   // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Switch1,"Button 1",&Bluetooth_Switch1);
   Lab6_AddCharacteristic(0xFFF8,4,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
-  Lab6_AddNotifyCharacteristic(0xFFF9,4,&LightData,"Light",&Bluetooth_ReadLight);
+  Lab6_AddNotifyCharacteristic(0xFFF9,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
 
   // TODO Make notify for light and plot it to pygui
 

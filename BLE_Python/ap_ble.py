@@ -64,8 +64,6 @@ DEVICE_NAME = "Shape the World"
 
 HALFWORD_UUID_R = "0000fff2" #read-only characteristic for the HalfWordData data (switches). 
 WORD_UUID_W = "0000fff3" #write-only characteristic for the WordData data (LED). 
-SWITCH1_UUID_N = "0000fff4" #notify characteristic Switch1 that can be subscribed to to get the data
-
 SWITCH1_UUID_N = "0000fff7" #notify characteristic Switch1 that can be subscribed to to get the data
 TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData data (Temperature).
 TIME_UUID_R = "0000fff2" # read-only characteristic for the WordData data (Time).
@@ -222,7 +220,7 @@ async def pygame_gui():
             print ("Light =", Switch_g)
             f.write("{}, {}\n".format(Time,Switch_g))   	
 
-            y = 250 - 2 * Switch_g;
+            y = Switch_g / 2;       # Modify this based on the range of values being read
             for i in range(10):			
                 t+=1
                 if t >= width:
