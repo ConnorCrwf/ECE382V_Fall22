@@ -378,4 +378,5 @@ license.txt
 ReadMe.txt
 TExaSdisplay.exe
 TExaSdisplayLicense.txt
-/.metadata/
+.metadata/
+BLE_Python/ap_ble_daniel.BAT
