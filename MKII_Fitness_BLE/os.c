@@ -13,7 +13,7 @@
 void StartOS(void);
 
 #define NUMTHREADS  6        // maximum number of threads
-#define NUMPERIODIC 2        // maximum number of periodic threads
+#define NUMPERIODIC 3        // maximum number of periodic threads
 #define STACKSIZE   100      // number of 32-bit words in stack per thread
 struct tcb{
   int32_t *sp;       // pointer to stack (valid for threads not running
