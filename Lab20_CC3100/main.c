@@ -212,7 +212,7 @@ void Racing(void){
 }
 
 #define WEBPAGE "maker.ifttt.com"
-#define REQUEST "POST /trigger/log_data/with/key/m1-J-mZVpGuSV4h4tz_ypiI11Z6XrzHR3xBJnoUFIPo HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
+#define REQUEST "POST /trigger/log_data/with/key/cMBVpKWdgTEVHs1_0uwo4nHcuGTRreaM-eohrN9gk1y HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
 //#define REQUEST "POST /trigger/log_data/with/key/1234567890abcdef1234567890abcdef HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
 // 1) create an account on IFTTT (record your key)
 // 2) create an IFTTT applet called log_data that triggers on Webhooks and then adds a row to your googlesheet
@@ -347,6 +347,92 @@ int main(void){int32_t retVal;
     SoftLeftUntilThStart(NORTH);      // 90
     RacingStatus = 0; while(RacingStatus==0){}; Motor_Stop(); LogData(MyX,MyY,MyTheta); Display();
     SendData();
+    StopUntilBumperTouched();
+  }
+}
+
+// *********************************************************************************
+// *********************************************************************************
+// *********************************************************************************
+int main1(void) {
+  // Initialize LaunchPad
+  initClk();        // 48 MHz
+  LaunchPad_Init();      // initialize LaunchPad I/O
+  LaunchPad_Output(BLUE);
+
+  // Initialize LCD Screen
+  SSD1306_Init(SSD1306_SWITCHCAPVCC);
+  SSD1306_Clear(); SSD1306_SetCursor(0,0);
+
+  // Initialize RSLK Robot
+  Bump_Init();      // RSLK bump switches
+  Motor_Init();
+  Motor_Stop();
+  Blinker_Init();
+  Tachometer_Init();
+
+  // TODO
+  if(LaunchPad_Input()==0){
+    Odometry_SetPower(7000,3000); ///< PWM for fast motions, out of 15000
+    SSD1306_OutString("RSLK MAX, Fast");
+  }else{
+    Odometry_SetPower(4000,2000); ///< PWM for fast motions, out of 15000
+    SSD1306_OutString("RSLK MAX, Valvano");
+  }
+
+  // Connect to WiFi Access Point and print messages through UART0
+  int32_t retVal;
+  SSD1306_SetCursor(0,1); SSD1306_OutString("Lab 20 Wi-Fi");
+  SSD1306_SetCursor(0,2); SSD1306_OutString("North at (0,0)");
+  if (Bump_Read()) {
+    bWifi=0;
+    SSD1306_SetCursor(0,3); SSD1306_OutString("Wifi is off");
+  }
+  else {
+    bWifi = 1;
+    UART0_Initprintf();    // Send data to PC, 115200 bps
+    printf("Lab 20 Barrel racing\nStarting configureSimpleLinkToDefaultState(); ...");
+    retVal = configureSimpleLinkToDefaultState();
+    if(retVal < 0)Crash(4000000);
+    printf(" Completed\nStarting sl_Start(0, 0, 0); ...");
+    retVal = sl_Start(0, 0, 0);
+    if((retVal < 0) || (ROLE_STA != retVal) ) Crash(8000000);
+    printf(" Completed\nStarting establishConnectionWithAP(); ...");
+    retVal = establishConnectionWithAP();
+    if(retVal < 0)Crash(1000000);
+    printf("Connected\n");
+    SSD1306_SetCursor(0,3); SSD1306_OutString("Connected");
+    printf("\nStarting sl_NetAppDnsGetHostByName(%s) ...",WEBPAGE);
+    retVal = sl_NetAppDnsGetHostByName((_i8 *)WEBPAGE,
+              strlen(WEBPAGE),&DestinationIP, SL_AF_INET);
+    if(retVal == 0){
+     printf(" Completed\n");
+    }else{
+      printf(" Failed\n");
+      bWifi = 0;
+    }
+  }
+
+  // Initialize periodic interrupt to handle odometry
+  TimerA1_Init(&Racing,20000); // every 40ms
+
+  // Wait for bumper switch press
+  SSD1306_SetCursor(0,4); SSD1306_OutString("Hit bump to start"); printf("Hit bump to start\n");
+  WaitUntilBumperTouched();
+
+  // Main application
+  while (1) {
+    ClearData();    // Clear value strings
+
+    // Buddy follower, line follower, or wall follower
+
+
+
+
+    // Send data over WiFi
+    SendData();
+
+    // Wait for bumper switch press
     StopUntilBumperTouched();
   }
 }

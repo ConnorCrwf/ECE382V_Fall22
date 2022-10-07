@@ -210,10 +210,9 @@ void Crash(uint32_t time){
  */
 // 1) change Austin Texas to your city
 // 2) you can change metric to imperial if you want temperature in F
-#define WELCOME "\nFetching weather from openweathermap.org"
-#define WEBPAGE "api.openweathermap.org"
-//#define REQUEST "GET /data/2.5/weather?q=Austin&APPID=1234567890abcdef1234567890abcdef&units=metric HTTP/1.1\nHost:api.openweathermap.org\nAccept: */*\n\n"
-#define REQUEST "GET /data/2.5/weather?q=Austin&APPID=5a08894f25cdde410729d39d31176fb6&units=metric HTTP/1.1\nHost:api.openweathermap.org\nAccept: */*\n\n"
+// #define WELCOME "\nFetching weather from openweathermap.org"
+// #define WEBPAGE "api.openweathermap.org"
+// #define REQUEST "GET /data/2.5/weather?q=Austin&APPID=d4065af4f44196d74b10fd72ad87e944&units=metric HTTP/1.1\nHost:api.openweathermap.org\nAccept: */*\n\n"
 // 1) go to http://openweathermap.org/appid#use 
 // 2) Register on the Sign up page
 // 3) get an API key (APPID) replace the 1234567890abcdef1234567890abcdef with your APPID
@@ -221,9 +220,9 @@ void Crash(uint32_t time){
 /*
  * IFTTT send email parameters
  */
-//#define WELCOME "\nIFTTT trigger email"
-//#define WEBPAGE "maker.ifttt.com"
-//#define REQUEST "POST /trigger/button_pressed/with/key/1234567890abcdef1234567890abcdef HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: 68\n\n{\"value1\" : \"TI-RSLK MAX\", \"value2\" : \"Hello\", \"value3\" : \"World!\" }\n\n"
+#define WELCOME "\nIFTTT trigger email"
+#define WEBPAGE "maker.ifttt.com"
+#define REQUEST "POST /trigger/button_pressed/with/key/cMBVpKWdgTEVHs1_0uwo4nHcuGTRreaM-eohrN9gk1y HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: 68\n\n{\"value1\" : \"TI-RSLK MAX\", \"value2\" : \"Hello\", \"value3\" : \"World!\" }\n\n"
 // 1) create an account on IFTTT (record your key)
 // 2) follow directions in Lab 20 to create an IFTTT applet called button_pressed that triggers on Webhooks and then sends you email
 // 3) replace 1234567890abcdef1234567890abcdef with your
