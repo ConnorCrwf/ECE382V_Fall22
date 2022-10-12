@@ -359,6 +359,7 @@ int main0(void){int32_t retVal;
 // *********************************************************************************
 // *********************************************************************************
 // *********************************************************************************
+// The following section has the RightWallFollower code borrowed from the Competition_Buddy_Follower Project.
 int32_t Mode;
 
 void WaitForOperator(void){uint32_t in;
@@ -565,23 +566,33 @@ void RightWallFollow(void){  // wall follow system
 
     // Send data if needed
     if (send_flag) {
-      SendData();
-      ClearData();  // clear data buffer
-      send_flag = 0;  // reset flag to off
+      SendData();     // send log data to Google Sheet
+      ClearData();    // clear logging data
+      send_flag = 0;  // reset send flag
     }
   }
 }
 
+// *********************************************************************************
+// *********************************************************************************
+// *********************************************************************************
+// The following section has logging methods for distance data.
 
+// Function to create a value strings of log data.
 void LogData1(int32_t x, int32_t y, int32_t th){
+  // Exit if strings are too long
   if(strlen(Value1String)>(MAX_VALUE_BUFF_SIZE-32)) return;
   if(strlen(Value2String)>(MAX_VALUE_BUFF_SIZE-32)) return;
   if(strlen(Value3String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+
+  // Separate multiple values with a comma
   if(DataCount > 0){
     strcat(Value1String,", "); // comma separated values
     strcat(Value2String,", ");
     strcat(Value3String,", ");
   }
+  
+  // Append data to value strings
   sprintf(LogMessage,"%d",x);
   strcat(Value1String,LogMessage);
   sprintf(LogMessage,"%d",y);
@@ -591,25 +602,26 @@ void LogData1(int32_t x, int32_t y, int32_t th){
   DataCount++;
 }
 
-int log_count = 0;
 
+// Periodic task to log data every 4s and send it every 20s.
+int log_count = 0;
 void Logging(void) {
   if (log_count%100 == 0) {   // every 4s approx.
-
     // Store log data
     LogData1(Left, Center, Right);
 
     // Send data over WiFi
     if (log_count == 500) {  // every 20s approx
-      send_flag = 1;    // sending is slow so it cannot be performed in ISR
-
+      send_flag = 1;    // sending is slow so it cannot be performed in ISR, use flag
       log_count = 0;    // reset counter
     }
   }
-
   log_count++;
 }
 
+// *********************************************************************************
+// *********************************************************************************
+// *********************************************************************************
 int main1(void) {
   uint8_t in;
 
@@ -703,8 +715,9 @@ int main1(void) {
       Blinker_Output(FR_RGHT+FR_LEFT);
     }
 
+    ClearData();  // clear logging data
+
     // Begin application
-    ClearData();
     if(in&0x0F) RightWallFollow();
   }
 }
