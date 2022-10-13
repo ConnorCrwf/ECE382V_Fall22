@@ -2,7 +2,7 @@
 // Runs on LM4F120/TM4C123/MSP432
 // Lab 3 starter file.
 // Daniel Valvano
-// March 24, 2016
+// March 24, 2016, increased stack size to 800 bytes 10/11/2022
 
 #include <stdint.h>
 #include "os.h"
@@ -14,7 +14,7 @@ void StartOS(void);
 
 #define NUMTHREADS  6        // maximum number of threads
 #define NUMPERIODIC 2        // maximum number of periodic threads
-#define STACKSIZE   100      // number of 32-bit words in stack per thread
+#define STACKSIZE   200      // number of 32-bit words in stack per thread
 struct tcb{
   int32_t *sp;       // pointer to stack (valid for threads not running
   struct tcb *next;  // linked-list pointer
