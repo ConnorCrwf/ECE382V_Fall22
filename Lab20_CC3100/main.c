@@ -679,7 +679,7 @@ int main1(void) {
   Clock_Delay1ms(2000); // Delay 2s
 
   // Initialize periodic interrupt for logging data
-  TimerA1_Init(&Logging, 20000); // every 5s
+  TimerA1_Init(&Logging, 20000); // every 40ms
 
   // Start main application, follow right wall
   while(1){
