@@ -64,12 +64,11 @@ DEVICE_NAME = "Shape the World"
 
 HALFWORD_UUID_R = "0000fff2" #read-only characteristic for the HalfWordData data (switches). 
 WORD_UUID_W = "0000fff3" #write-only characteristic for the WordData data (LED). 
-SWITCH1_UUID_N = "0000fff4" #notify characteristic Switch1 that can be subscribed to to get the data
-
-SWITCH1_UUID_N = "0000fff9" #notify characteristic Switch1 that can be subscribed to to get the data
+SWITCH1_UUID_N = "0000fff7" #notify characteristic Switch1 that can be subscribed to to get the data
 TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData data (Temperature).
-TIME_UUID_R = "0000FFF2" # read-only characteristic for the WordData data (Time).
-LED_UUID_W = "0000FFF8" # read-only characteristic for the WordData data (LED). 
+TIME_UUID_R = "0000fff2" # read-only characteristic for the WordData data (Time).
+LED_UUID_W = "0000fff8" # read-only characteristic for the WordData data (LED). 
+LIGHT_UUID_N = "0000fff9" # notify characteristic Light that can be subscribed to to get the data.
 
 
 # To discover characteristics, 
@@ -79,7 +78,7 @@ VENDOR_SPECIFIC_UUID = "-0000-1000-8000-00805f9b34fb" #this is appended to the e
 
 #Map keys to binary values. Avoid a lot of if statements. The key pressed indexes into the dictionary to get the value 
 # KEYS_MAP = {pygame.K_0:0, pygame.K_1:1, pygame.K_2:2,pygame.K_3:3,pygame.K_4:4,pygame.K_5:5,pygame.K_6:6,pygame.K_7:7, pygame.K_s:11}
-KEYS_MAP = {pygame.K_s:11, pygame.K_t:12, pygame.K_l:13}
+KEYS_MAP = {pygame.K_0:0, pygame.K_1:1, pygame.K_2:2,pygame.K_3:3,pygame.K_4:4,pygame.K_5:5,pygame.K_6:6,pygame.K_7:7,pygame.K_s:11,pygame.K_t:12}
 
 FRAMERATE = 1/30 #set frame rate for screen - 30 fps
 
@@ -99,7 +98,7 @@ def notification_handler(sender, data): #Callback function for the subscribed no
     global Switch_g
     global Semaphore
     #print("{0}: {1}".format(sender, data))
-    RawData  = struct.unpack(">H", data)  # unpack 1 unsigned short
+    RawData  = struct.unpack(">I", data)  # unpack 1 unsigned long
     #print (data)
     #print (RawData)
     Switch_g = RawData[0]  #update global for the main loop
@@ -131,16 +130,6 @@ async def connect_name(device_name):
             print("Connected to Shape the World")
 
             return client
-
-#Reads the Halfword read only characteristic and updates the global distance variable. 
-async def read_Halfword(client):
-    global Halfword_g
-    halfword_data = await client.read_gatt_char(HALFWORD_UUID_R + VENDOR_SPECIFIC_UUID)
-    #print (halfword_data)
-    halfword_values = struct.unpack(">H", halfword_data) #unpack one 16-bit unsigned short
-    #print (halfword_values)
-    Halfword_g = halfword_values[0] #send to global
-    print ("Halfword = ", Halfword_g)
 
 # Reads the Temperature read only characteristic and updates the global halfword variable. 
 async def read_Temperature(client):
@@ -178,10 +167,10 @@ async def pygame_gui():
         #print("Failed to connect, trying again")
 
     #Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
-    print("Trying to subscribe to Switch1 data")
+    print("Trying to subscribe to Light data")
     #subscribe to distance switch1 data
-    await subscribe(client_g, SWITCH1_UUID_N)
-    print("Subscribed to Switch1 data")
+    await subscribe(client_g, LIGHT_UUID_N)
+    print("Subscribed to Light data")
     f = open("switch.txt", "a")
 
     #init screen
@@ -209,7 +198,7 @@ async def pygame_gui():
             elif event.type == pygame.KEYDOWN and event.key in KEYS_MAP:
                 current_keys_g = KEYS_MAP[event.key] 
 
-        #If the new values are different then we write to the characteristic
+        # If the new values are different then we write to the characteristic
         if current_keys_g != current_keys_g_old:
             if current_keys_g == 11: # s
                 asyncio.create_task(read_Time(client_g))
@@ -217,29 +206,21 @@ async def pygame_gui():
                 asyncio.create_task(read_Temperature(client_g))
             elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
                 Word_g = current_keys_g
-                print ("Word = ", Word_g)
-                value = struct.pack(">h", Word_g) #pack into binary, 1 unsigned long (32bit)
+                print ("LED = ", Word_g)
+                value = struct.pack(">h", Word_g) # pack into binary, 1 unsigned long (32bit)
                 #print (value)
                 asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
-            # if current_keys_g == 11: #s
-            #     asyncio.create_task(read_Halfword(client_g))
-            # elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
-            #     Word_g = current_keys_g
-            #     print ("Word = ", Word_g)
-            #     value = struct.pack(">h", Word_g) #pack into binary, 1 unsigned long (32bit)
-            #     #print (value)
-            #     asyncio.create_task(client_g.write_gatt_char(WORD_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
 
         current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
-        #Update the screen on notification
+        # Update the screen on notification
         if Semaphore == 1:
             Semaphore = 0
             Time+=1
-            print ("Switch1 =", Switch_g)
+            print ("Light =", Switch_g)
             f.write("{}, {}\n".format(Time,Switch_g))   	
 
-            y = 200-100*Switch_g;
+            y = Switch_g / 2;       # Modify this based on the range of values being read
             for i in range(10):			
                 t+=1
                 if t >= width:

@@ -143,6 +143,9 @@ P3.10 P5.5 UNUSED     NA        P4.10 P3.7  UNUSED      OUT(see R75)
 #include "..\inc\SSD1306.h"
 #include "..\inc\odometry.h"
 #include "..\inc\blinker.h"
+#include "../inc/LPF.h"
+#include "../inc/opt3101.h"
+#include "../inc/I2CB1.h"
 
 //enum outputtype CurrentOutputType = OLED;
 extern int32_t MyX,MyY;               // position in 0.0001cm
@@ -212,7 +215,7 @@ void Racing(void){
 }
 
 #define WEBPAGE "maker.ifttt.com"
-#define REQUEST "POST /trigger/log_data/with/key/m1-J-mZVpGuSV4h4tz_ypiI11Z6XrzHR3xBJnoUFIPo HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
+#define REQUEST "POST /trigger/log_data/with/key/cMBVpKWdgTEVHs1_0uwo4nHcuGTRreaM-eohrN9gk1y HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
 //#define REQUEST "POST /trigger/log_data/with/key/1234567890abcdef1234567890abcdef HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
 // 1) create an account on IFTTT (record your key)
 // 2) create an IFTTT applet called log_data that triggers on Webhooks and then adds a row to your googlesheet
@@ -268,7 +271,7 @@ int32_t ASize = 0; SlSockAddrIn_t  Addr; int32_t logSize;
 }
 
 uint32_t result;
-int main(void){int32_t retVal;
+int main0(void){int32_t retVal;
   initClk();        // 48 MHz
   Bump_Init();      // RSLK bump switches
   LaunchPad_Init();      // initialize LaunchPad I/O
@@ -318,6 +321,7 @@ int main(void){int32_t retVal;
   }
   SSD1306_SetCursor(0,4); SSD1306_OutString("Hit bump to start"); printf("Hit bump to start\n");
   TimerA1_Init(&Racing,20000); // every 40ms
+
   /* logging test code
   ClearData();
   for(int32_t i=10;i<50;i=i+3){
@@ -348,6 +352,373 @@ int main(void){int32_t retVal;
     RacingStatus = 0; while(RacingStatus==0){}; Motor_Stop(); LogData(MyX,MyY,MyTheta); Display();
     SendData();
     StopUntilBumperTouched();
+  }
+}
+
+
+// *********************************************************************************
+// *********************************************************************************
+// *********************************************************************************
+// The following section has the RightWallFollower code borrowed from the Competition_Buddy_Follower Project.
+int32_t Mode;
+
+void WaitForOperator(void){uint32_t in;
+  Mode = 0;
+  do{ // wait for touch
+    Clock_Delay1ms(300);
+    LaunchPad_Output(0); // off
+    Clock_Delay1ms(300);
+    LaunchPad_Output(3); // red/green
+    in = Bump_Read();
+  }while (in == 0);
+  while(Bump_Read()){ // wait for release
+    Clock_Delay1ms(150);
+    LaunchPad_Output(0); // off
+    Clock_Delay1ms(150);
+    LaunchPad_Output(1); // red
+  }
+  for(uint32_t i=8;i>4;i=i-1){
+    Clock_Delay1ms(50*i);
+    LaunchPad_Output(2); // green
+    Clock_Delay1ms(50*i);
+    LaunchPad_Output(0); // off
+  }
+  Mode = 1;
+}
+
+
+//*****************System2*************************
+// Wall follow, robot racing from Jacki project
+int32_t Distance;     // distance to closed object in mm
+uint8_t Last;
+typedef struct {
+  uint32_t on;  // blinker bits
+  uint32_t off; // blinker bits
+  uint32_t bit; // specifies rate
+} blink_t;
+const blink_t Blinks[6]={
+  {BK_RGHT,BK_LEFT,0x04},                  // Mode=0, stopped, inactive
+  {BK_RGHT+BK_LEFT,BK_RGHT+BK_LEFT,0x04},  // Mode=1, stopped, active
+  {FR_RGHT+FR_LEFT,0,0x08},                // Mode=2, forward, active
+  {BK_RGHT+BK_LEFT,0,0x10},                // Mode=3, backward, active
+  {FR_RGHT+BK_RGHT,0,0x20},                // Mode=4, right, active
+  {FR_LEFT+BK_LEFT,0,0x20}                 // Mode=5, left, active
+};
+
+
+#define FAST 0
+void CheckForCrash(void){  // runs at about 10 Hz
+  uint8_t in;
+  static int count=0;
+  in = Bump_Read();
+  if(in&&(Last==0)){
+    Mode = 0; // stop
+    Distance = 0;
+    Motor_Stop();
+  }
+  Last = in;
+  count++;
+  if(count&Blinks[Mode].bit){
+    Blinker_Output(Blinks[Mode].on);
+  }else{
+     Blinker_Output(Blinks[Mode].off);
+  }
+}
+
+
+// Private function that clamps PWM duty cycles to valid range according to constants.
+#define PWMNOMINAL 3750           // duty cycle of wheels if no error (0 to 14,998)
+#define PWMSWING 2250             // maximum duty cycle deviation to clamp equation; PWMNOMINAL +/- SWING must not exceed the range 0 to 14,998
+int32_t UR, UL;  // PWM duty 0 to 14,998
+
+void clamp(void){
+  if(UR < (PWMNOMINAL-PWMSWING)) UR = PWMNOMINAL-PWMSWING; // 1,500 to 6,000
+  if(UR > (PWMNOMINAL+PWMSWING)) UR = PWMNOMINAL+PWMSWING;
+  if(UL < (PWMNOMINAL-PWMSWING)) UL = PWMNOMINAL-PWMSWING;   // 1,500 to 6,000
+  if(UL > (PWMNOMINAL+PWMSWING)) UL = PWMNOMINAL+PWMSWING;
+}
+
+
+#define FILTERSIZE 4   // replace with your choice see "FIR_Digital_LowPassFilter.xls"
+#define PWMNOMINAL 3750           // duty cycle of wheels if no error (0 to 14,998)
+#define OVERFLOW 20000  // over this value is no object
+#define WALLMIN  250  // if below this distance, the corresponding wheel must spin faster to turn away (units of mm)
+#define WALLMAX  450  // if above this distance, the corresponding wheel must spin slower to turn towards (units of mm)
+#define WALLFORWARD 250          // if forward measurement below this distance, initiate slow turn (units of mm)
+#define WALLTOOCLOSE 150         // if forward measurement below this distance and left and right also low, stuck in a corner so initiate reverse (units of mm)
+#define WALLREVERSEAMOUNT 75    // rough, imprecise distance to back up if stuck in a corner (units of mm)
+#define WALLOUTOFSIGHT 600
+#define WALLCENTER ((WALLMIN + WALLMAX)/2) // middle of the distance range between 'WALLMIN' and 'WALLMAX'; used in proportional controller for zero error condition (units of mm)
+#define Kp  10                    // proportional controller gain
+int32_t Left;         // distance to left object in mm
+int32_t Center;       // distance to center object in mm
+int32_t Right;        // distance to right object in mm
+uint32_t Distances[3];
+uint32_t Amplitudes[3];
+uint32_t TxChannel;
+uint32_t FilteredDistances[3];
+int8_t send_flag = 0;
+
+void RightWallFollow(void){  // wall follow system
+  uint32_t channel = 1;
+  uint32_t time=0;
+
+  SSD1306_Clear();
+  SSD1306_OutString("OPT3101");
+  SSD1306_SetCursor(0, 1); SSD1306_OutString("Touch bump");
+  SSD1306_SetCursor(0, 2); SSD1306_OutString("  to start");
+  SSD1306_SetCursor(0, 3); SSD1306_OutString("Valvano");
+  SSD1306_SetCursor(0, 4); SSD1306_OutString("Wall Follow");
+  SSD1306_SetCursor(0, 5); SSD1306_OutString("Proportional");
+  WaitForOperator();
+  SSD1306_SetCursor(0, 1);
+  SSD1306_OutString("Left =");
+  SSD1306_SetCursor(0, 2);
+  SSD1306_OutString("Centr=");
+  SSD1306_SetCursor(0, 3);
+  SSD1306_OutString("Right=");
+  OPT3101_Init();
+  OPT3101_Setup();
+  OPT3101_CalibrateInternalCrosstalk();
+  OPT3101_ArmInterrupts(&TxChannel, Distances, Amplitudes);
+  TxChannel = 3;
+  OPT3101_StartMeasurementChannel(channel);
+  LPF_Init(100,FILTERSIZE);
+  LPF_Init2(100,FILTERSIZE);
+  LPF_Init3(100,FILTERSIZE);
+  UR = UL = PWMNOMINAL;   // initialize
+  Motor_Forward(UL, UR);
+  EnableInterrupts();
+  while(1){
+    CheckForCrash();
+    if(Mode == 0){
+      WaitForOperator();
+    }
+    WaitForInterrupt();
+    if(TxChannel <= 2){ // 0,1,2 means new data
+      time++;
+      if((time&0x3F) == 0){
+        LaunchPad_LED(1);
+      }
+      if((time&0x3F) == 0x20){
+        LaunchPad_LED(0);
+      }
+      if(TxChannel==0){
+        FilteredDistances[0] = LPF_Calc(Distances[0]);
+        Left   = umin32(FilteredDistances[0],OVERFLOW); // convert to signed
+      }else if(TxChannel==1){
+        FilteredDistances[1] = LPF_Calc2(Distances[1]);
+        Center = umin32(FilteredDistances[1],OVERFLOW); // convert to signed
+      }else {
+        FilteredDistances[2] = LPF_Calc3(Distances[2]);
+        Right  = umin32(FilteredDistances[2],OVERFLOW); // convert to signed
+      }
+      Distance = min32(Left,Center,Right); // closest object
+      SSD1306_SetCursor(6, TxChannel+1);
+      SSD1306_OutUDec(FilteredDistances[TxChannel]);
+      TxChannel = 3; // 3 means no data
+      channel = (channel+1)%3;
+      OPT3101_StartMeasurementChannel(channel);
+    }
+    if(Mode == 3){
+      if((Distance > (WALLTOOCLOSE + WALLREVERSEAMOUNT))){
+        Mode = 1;
+// throw away previous wheel settings and initially try going straight
+// another track-specific assumption could be to initially try a slight right turn
+// ultimately, this might not matter if the next pass through the control loop picks something else
+        UR = UL = PWMNOMINAL;
+        Motor_Forward(UL, UR);
+      }
+    }
+    else if(Distance < WALLTOOCLOSE){
+      // control logic: avoid forward wall by reversing due to no room on right or left
+      Motor_Backward(PWMNOMINAL, PWMNOMINAL-1000); // back up with a slight left turn bias
+      Mode = 3;
+    }
+    else if(Center < WALLFORWARD){
+      Mode = 5; // hard turn left
+      UR = PWMNOMINAL;
+      UL = PWMNOMINAL/2;
+      Motor_Forward(UL, UR);
+    }
+    else if(Right < WALLMAX){
+     // control logic: stay close to the right wall
+      Mode = 2;
+      UR = PWMNOMINAL + (WALLCENTER - Right)*Kp;
+      UL = PWMNOMINAL;
+      clamp();
+      Motor_Forward(UL, UR);
+    }
+    else if (Right < WALLOUTOFSIGHT){
+    // control logic: stay close to the right wall
+      Mode = 4;
+      UR = PWMNOMINAL + (WALLCENTER - Right)*Kp;
+      UL = PWMNOMINAL - (WALLCENTER - Right)*Kp;
+      clamp();
+      Motor_Forward(UL, UR);
+    }
+    else{  // wall too far away
+      Mode = 1; //  right turn
+      UR = PWMNOMINAL-1000;
+      UL = PWMNOMINAL+1000;
+      Motor_Forward(UL, UR);
+    }
+
+    // Send data if needed
+    if (send_flag) {
+      SendData();     // send log data to Google Sheet
+      ClearData();    // clear logging data
+      send_flag = 0;  // reset send flag
+    }
+  }
+}
+
+// *********************************************************************************
+// *********************************************************************************
+// *********************************************************************************
+// The following section has logging methods for distance data.
+
+// Function to create a value strings of log data.
+void LogData1(int32_t x, int32_t y, int32_t th){
+  // Exit if strings are too long
+  if(strlen(Value1String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+  if(strlen(Value2String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+  if(strlen(Value3String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+
+  // Separate multiple values with a comma
+  if(DataCount > 0){
+    strcat(Value1String,", "); // comma separated values
+    strcat(Value2String,", ");
+    strcat(Value3String,", ");
+  }
+  
+  // Append data to value strings
+  sprintf(LogMessage,"%d",x);
+  strcat(Value1String,LogMessage);
+  sprintf(LogMessage,"%d",y);
+  strcat(Value2String,LogMessage);
+  sprintf(LogMessage,"%d",th);
+  strcat(Value3String,LogMessage);
+  DataCount++;
+}
+
+
+// Periodic task to log data every 4s and send it every 20s.
+int log_count = 0;
+void Logging(void) {
+  if (log_count%100 == 0) {   // every 4s approx.
+    // Store log data
+    LogData1(Left, Center, Right);
+
+    // Send data over WiFi
+    if (log_count == 500) {  // every 20s approx
+      send_flag = 1;    // sending is slow so it cannot be performed in ISR, use flag
+      log_count = 0;    // reset counter
+    }
+  }
+  log_count++;
+}
+
+// *********************************************************************************
+// *********************************************************************************
+// *********************************************************************************
+int main1(void) {
+  uint8_t in;
+
+  // Initialize LaunchPad
+  DisableInterrupts();
+  initClk();
+  LaunchPad_Init(); // built-in switches and LEDs
+  LaunchPad_Output(0);
+
+  // Initialize LCD Screen
+  SSD1306_Init(SSD1306_SWITCHCAPVCC);
+  SSD1306_Clear(); SSD1306_SetCursor(0,0);
+
+  // Initialize RSLK Robot
+  Bump_Init(); // bump switches
+  // Last = Bump_Read();
+  Motor_Init();
+  Motor_Stop();
+  Blinker_Init();
+  I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
+
+  // Connect to WiFi Access Point and print messages through UART0
+  int32_t retVal;
+  SSD1306_SetCursor(0,1); SSD1306_OutString("Lab 20 Wi-Fi");
+  if (Bump_Read()) {
+    bWifi=0;
+    SSD1306_SetCursor(0,3); SSD1306_OutString("Wifi is off");
+  }
+  else {
+    bWifi = 1;
+    UART0_Initprintf();    // Send data to PC, 115200 bps
+    printf("Lab 20 Barrel racing\nStarting configureSimpleLinkToDefaultState(); ...");
+    retVal = configureSimpleLinkToDefaultState();
+    if(retVal < 0)Crash(4000000);
+    printf(" Completed\nStarting sl_Start(0, 0, 0); ...");
+    retVal = sl_Start(0, 0, 0);
+    if((retVal < 0) || (ROLE_STA != retVal) ) Crash(8000000);
+    printf(" Completed\nStarting establishConnectionWithAP(); ...");
+    retVal = establishConnectionWithAP();
+    if(retVal < 0)Crash(1000000);
+    printf("Connected\n");
+    SSD1306_SetCursor(0,3); SSD1306_OutString("Connected");
+    printf("\nStarting sl_NetAppDnsGetHostByName(%s) ...",WEBPAGE);
+    retVal = sl_NetAppDnsGetHostByName((_i8 *)WEBPAGE,
+              strlen(WEBPAGE),&DestinationIP, SL_AF_INET);
+    if(retVal == 0){
+     printf(" Completed\n");
+    }else{
+      printf(" Failed\n");
+      bWifi = 0;
+    }
+  }
+
+  LaunchPad_Output(BLUE);
+  Clock_Delay1ms(2000); // Delay 2s
+
+  // Initialize periodic interrupt for logging data
+  TimerA1_Init(&Logging, 20000); // every 40ms
+
+  // Start main application, follow right wall
+  while(1){
+    // Option to select, only right wall follow
+    SSD1306_Clear();
+    SSD1306_SetCursor(0,0); SSD1306_OutString("RSLK MAX");
+    SSD1306_SetCursor(0,1); SSD1306_OutString("Press bumper");
+    SSD1306_SetCursor(0,2); SSD1306_OutString("0-4: Right Wall");
+    do{ // wait for touch
+      Clock_Delay1ms(250);
+      LaunchPad_Output(0); // off
+      Blinker_Output(FR_RGHT+BK_LEFT);
+      Clock_Delay1ms(250);
+      LaunchPad_Output(3); // red/green
+      Blinker_Output(BK_RGHT+FR_LEFT);
+      in = Bump_Read();
+    }while (in == 0);
+
+    // Option to start running
+    SSD1306_SetCursor(0,1); SSD1306_OutString("Valvano     ");
+    SSD1306_SetCursor(0,2); SSD1306_OutString("Release bump");
+    SSD1306_SetCursor(0,3); SSD1306_OutString("OPT3101     ");
+    if(in&0x0F) {
+      SSD1306_SetCursor(0,4); SSD1306_OutString("Right wall  ");
+      SSD1306_SetCursor(0,5); SSD1306_OutString(" follow     ");
+    }
+   while(Bump_Read()){ // wait for release
+      Clock_Delay1ms(200);
+      LaunchPad_Output(0); // off
+      Blinker_Output(0);
+      Clock_Delay1ms(200);
+      LaunchPad_Output(1); // red
+      Blinker_Output(FR_RGHT+FR_LEFT);
+    }
+
+    ClearData();  // clear logging data
+
+    // Begin application
+    if(in&0x0F) RightWallFollow();
   }
 }
 
@@ -732,6 +1103,16 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock){
 
 
 
+//********Trampoline for selecting main*****************
+#define trampoline  1
 
-
-
+void main() {
+  switch (trampoline) {
+    case 0:
+      main0();
+      break;
+    case 1:
+      main1();
+      break;
+  }
+}

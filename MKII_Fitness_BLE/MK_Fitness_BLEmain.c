@@ -78,8 +78,7 @@ uint16_t TemperatureHalfwordData; // 1C
 
 // New variables
 uint16_t Switch1;       // 16-bit notify data from Button 1
-uint32_t LED;           // 32-bit write-only data to LED
-uint32_t Joystick;
+uint16_t LED;           // 16-bit write-only data to LED
 
 // semaphores
 int32_t NewData;  // true when new numbers to display on top of LCD
@@ -490,7 +489,7 @@ void Task7(void){
     Count7++;
     AP_BackgroundProcess();
     if(Send0Flag){
-      AP_SendNotification(0);
+      AP_SendNotification(0);   // Sends notification characteristic to index 0.
       Send0Flag=0;
     }
     WaitForInterrupt();
@@ -500,19 +499,13 @@ void Task7(void){
 /*          End of Task7 Section              */
 /* ****************************************** */
 
-//---------------- Task8 samples LaunchPad switch 1 ----------------
-void Task8(void){
-  Switch1 = LaunchPad_Input()&0x01;   // Button 1 
-  if (Switch1) {
-    LaunchPad_Output(BLUE);
-  }
-  else {
-    LaunchPad_Output(0);
-  }
-}
-/* ****************************************** */
-/*          End of Task8 Section              */
-/* ****************************************** */
+// //---------------- Task8 samples LaunchPad Switch 1 ----------------
+// void Task8(void){
+//   Switch1 = LaunchPad_Input()&0x01;   // Button 1 
+// }
+// /* ****************************************** */
+// /*          End of Task8 Section              */
+// /* ****************************************** */
 
 // ********OutValue**********
 // Debugging dump of a data value to virtual serial port to PC
@@ -545,19 +538,16 @@ void Bluetooth_WritePlotState(void){ // called on a SNP Characteristic Write Ind
   BSP_Buzzer_Set(512);           // beep until next call of task3
   ReDrawAxes = 1;                // redraw axes on next call of display task
 }
-void Bluetooth_Steps(void){ // called on SNP CCCD Updated Indication
-  OutValue("\n\rCCCD Steps=",AP_GetNotifyCCCD(0));
-}
-void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
-  OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(1));
-}
+// void Bluetooth_Steps(void){ // called on SNP CCCD Updated Indication
+//   OutValue("\n\rCCCD Steps=",AP_GetNotifyCCCD(0));
+// }
+// void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
+//   OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(0));
+// }
 void Bluetooth_LED(void){
   LaunchPad_Output(LED);  // set LEDs with bottom bits
-  OutValue("\n\rWordData=",LED);
+  OutValue("\n\rLED Data=",LED);
 }
-// void Bluetooth_Joystick(void){  // called on SNP CCCD Updated Indication
-//   OutValue("\n\rCCCD Joystick=",AP_GetNotifyCCCD(2));
-// }
 extern uint16_t edXNum; // actual variable within TExaS
 void Bluetooth_Init(void){volatile int r;
   EnableInterrupts();
@@ -570,19 +560,17 @@ void Bluetooth_Init(void){volatile int r;
   Lab6_AddCharacteristic(0xFFF2,4,&Time,0x01,0x02,"Time",&Bluetooth_ReadTime,0);
   Lab6_AddCharacteristic(0xFFF3,4,&SoundRMS,0x01,0x02,"Sound",&Bluetooth_ReadSound,0);
   Lab6_AddCharacteristic(0xFFF4,2,&TemperatureHalfwordData,0x01,0x02,"Temperature",&Bluetooth_ReadTemperature,0);
-  Lab6_AddCharacteristic(0xFFF5,4,&LightData,0x01,0x02,"Light",&Bluetooth_ReadLight,0);
+  // Lab6_AddCharacteristic(0xFFF5,4,&LightData,0x01,0x02,"Light",&Bluetooth_ReadLight,0);
   Lab6_AddCharacteristic(0xFFF6,2,&edXNum,0x02,0x08,"edXNum",0,&TExaS_Grade);
   // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
 
-  // New Characteristic
-  Switch1 = 0; 
-  Lab6_AddNotifyCharacteristic(0xFFF9,2,&Switch1,"Button 1",&Bluetooth_Switch1);
-  // Lab6_AddCharacteristic(0xFFF8,4,&LED,0x02,0x08,"LED",&Bluetooth_LED);
-  // Lab6_AddNotifyCharacteristic(0xFFF9,4,&Joystick,"Joystick",&Bluetooth_Joystick);
+  // New Characteristics
+  // Switch1 = 0; 
+  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Switch1,"Button 1",&Bluetooth_Switch1);
+  Lab6_AddCharacteristic(0xFFF8,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
+  Lab6_AddNotifyCharacteristic(0xFFF9,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
 
-  // TODO Modify to read two characteristics (Time, Temperature?)
-  // Write one characteristic, turn LED on/off?
-  // Make notify for light and plot it to pygui
+  // TODO Make notify for light and plot it to pygui
 
   Lab6_RegisterService();
   Lab6_StartAdvertisement();
@@ -610,6 +598,7 @@ void Bluetooth_Init(void){volatile int r;
 int main(void){
   OS_Init();
   LaunchPad_Init();         // P1.0 is red LED on LaunchPad
+  LaunchPad_Output(0);
   Profile_Init();  // initialize the 7 hardware profiling pins
   Task0_Init();    // microphone init
   Task1_Init();    // accelerometer init
@@ -631,8 +620,8 @@ int main(void){
   OS_AddPeriodicEventThread(&Task0, 1);
   // Task 1 should run every 100ms
   OS_AddPeriodicEventThread(&Task1, 100);
-  // Task 8 should run every second
-  OS_AddPeriodicEventThread(&Task8, 1000);
+  // // Task 8 should run every second
+  // OS_AddPeriodicEventThread(&Task8, 1000);
   // Task2, Task3, Task4, Task5, Task6, Task7 are main threads
   OS_AddThreads(&Task2, &Task3, &Task4, &Task5, &Task6, &Task7);
   // when grading change 1000 to 4-digit number from edX
