@@ -14,7 +14,7 @@
 
 
 #define HEADER      '?'
-#define MAX_MSG_LEN 32
+#define MAX_MSG_LEN 12
 #define RX_TIMEOUT  9600
 
 
@@ -29,6 +29,8 @@ typedef struct Message {
 
 
 // Global variables
+char MY_ID =    '1';
+char DEST_ID =  '1';
 char OutMessage[] = "Hello World";
 
 char G_SEND_BUFF[sizeof(message_t)];
