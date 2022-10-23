@@ -83,6 +83,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 
 
 volatile uint32_t Time, MainCount;
+volatile uint32_t Time2, PrintFlag;
 #define LEDOUT (*((volatile uint8_t *)(0x42098040)))
 // P3->OUT is 8-bit port at 0x4000.4C22
 // I/O address be 0x4000.0000+n, and let b represent the bit 0 to 7.
@@ -131,48 +132,6 @@ void HC12_Init(uint32_t baud){
   //************ configuration ended***********************
   printf("\nRF_XMT initialization done\n");
 }
-
-
-// ******************************************************************************
-// ******************************************************************************
-// ******************************************************************************
-#define trampoline  2
-#define MY_ID       1
-#define DEST_ID     3
-//********SysTick_Handler*****************
-// ISR for SysTick timer, runs every 10ms.
-// Trampoline for selecting handler.
-// Inputs: none
-// Outputs: none
-void SysTick_Handler(void) {
-  switch (trampoline) {
-    case 0:
-      SysTick_Handler_1();
-      break;
-    case 1:
-      SysTick_Handler_5E();
-      break;
-    case 2:
-      SysTick_Handler_5F();
-      break;
-  }
-}
-
-//********Trampoline for selecting main*****************
-void main() {
-  switch (trampoline) {
-    case 0:
-      main_1();
-      break;
-    case 1:
-      main_5E();
-      break;
-    case 2:
-      main_5F();
-      break;
-  }
-}
-
 
 // ******************************************************************************
 // ******************************************************************************
@@ -420,7 +379,7 @@ uint32_t TIMER_FREQ = 24000000;
 uint32_t MICROSEC_UNITS = 2;
 uint32_t INTERRUPT_RATE_TIMER = 9600;   // 9.6kHz
 message_t OutPacket;
-
+uint8_t Len = 0;
 
 //********SysTick_Handler*****************
 // ISR for SysTick timer.
@@ -439,84 +398,10 @@ void SysTick_Handler_5F(void) {
         return;
       }
       else {
-        G_UNSENT_BYTES = sizeof(OutPacket);  // Length of data + header info
+        G_UNSENT_BYTES = sizeof(OutMessage) + 4;  // Length of data + 4 metadata
         memcpy(G_SEND_BUFF, &OutPacket, G_UNSENT_BYTES); 
         G_SEND_PTR = G_SEND_BUFF;
       }
-    }
-  }
-}
-
-//********PeriodicTask*****************
-// ISR for TimerA0.
-// Checks UART1 for communication through HC12 wireless module.
-// Runs at 9.6KHz.
-// Inputs: none
-// Outputs: none
-void PeriodicTask_5F(void) {
-  uint8_t in, len, error;
-
-  // Check for outgoing data that needs to be sent out
-  if (G_UNSENT_BYTES > 0) {
-    LaunchPad_Output(BLUE);
-
-    UART1_OutChar(*G_SEND_PTR);
-    G_SEND_PTR++;
-    G_UNSENT_BYTES--;
-  }
-
-  // Check UART1 for incoming data
-  if (UART1_InStatus()) {
-    in = UART1_InChar();
-    // Check recv buffer for incoming data that needs to be received
-    if (G_UNRECV_BYTES > 0) {
-      LaunchPad_Output(GREEN);
-      *G_RECV_PTR = in;
-      G_UNRECV_BYTES--;
-
-      // Once recv buffer reaches 0, check for error
-      if (G_UNRECV_BYTES == 0) {
-        // Calculate error from msg
-        error = G_RECV_BUFF[0];
-        for (int i = 1; i < len; i++) {
-          error = error ^ G_RECV_BUFF[i];
-        }
-        // Compare to transmitted error
-        if (error != in) {
-          LaunchPad_Output(RED);
-        }
-      }
-
-      G_RECV_PTR++;
-    }
-    else {
-      // Parse incoming message and set recv buffer
-      if (in == HEADER) {       // Check correct header
-        in = UART1_InChar();
-        if (in == MY_ID)  {     // Check message is for me
-          len = UART1_InChar();    // Retrieve length
-          G_UNRECV_BYTES = sizeof(message_t) - 3;   // Size of message - header - address
-          G_RECV_PTR = G_RECV_BUFF;   // Pointer to start of buffer
-        }
-        else {
-          while (UART1_InCharNonBlock()) {} // Clear message
-        }
-      }
-    }
-  }
-  // Check if incoming data was lost
-  else {
-    // Recv buffer is not empty, lost some data
-    if (G_UNRECV_BYTES > 0) {
-      LaunchPad_Output(RED);
-      // Timeout for 1 sec
-      if (++RX_TIMEOUT_CNT == RX_TIMEOUT) {
-        G_UNRECV_BYTES = 0;   // Reset buffer
-      }
-    }
-    else { //TODO This logic is not 100% correct because this should not happen when we are sending.
-      RX_TIMEOUT_CNT = 0;
-      LaunchPad_Output(0);
     }
   }
 }
@@ -526,11 +411,15 @@ void PeriodicTask_5F(void) {
 // Inputs: none
 // Outputs: none
 void main_5F(void) {
+  uint8_t count = 0;
+  uint8_t flag = 0;
+  uint8_t in, error;
+
   DisableInterrupts();  // Prevent interrupts during initialization
 
   // Standard initialization sequence
   Clock_Init48MHz();        // running on crystal
-  SysTick_Init(480000, 1);  // SysTick interrupts at 1KHz, priority 1
+  SysTick_Init(480000, 1);  // SysTick interrupts at 100Hz, priority 1
   LaunchPad_Init();         // P1.0 is red LED on LaunchPad
   UART0_Initprintf();       // serial port to PC for debugging
   SSD1306_Init(SSD1306_SWITCHCAPVCC);
@@ -549,28 +438,167 @@ void main_5F(void) {
   SSD1306_OutString(" RF_XMT init done\n");
   SSD1306_OutString("\nHold switch for 1s\n");
 
-  TimerA0_Init(&PeriodicTask_5F, 
-    (TIMER_FREQ / MICROSEC_UNITS) / INTERRUPT_RATE_TIMER);   // TimerA0 interrupts at 9.6KHz, priority 2
-  //TODO crcInit();
-
   // Create output message
   OutPacket.header = HEADER;
   OutPacket.address = DEST_ID;
   OutPacket.length = sizeof(OutMessage);
   memcpy(OutPacket.data, OutMessage, OutPacket.length);
-  uint8_t i = 1, error;  // Calculate error
-  error = OutMessage[0];
-  while (i < OutPacket.length) {
-    error = error ^ OutPacket.data[i];
-    i++;
-  }
-  OutPacket.error = error;
+  OutPacket.error = OutPacket.length ^ OutPacket.data[0];
 
+  // Dynamic ID allocation
+  while (count < 5) {
+    if (!flag) {
+      UART1_OutChar(MY_ID);     // Broadcast my ID
+      flag = 1;
+    }
+    
+    // Check if someone else is awake, up to 5sec
+    if (UART1_InStatus()) {
+      in = UART1_InCharNonBlock();
+      // Check to see if it's an "I'm awake msg"
+      if (in == '1') {
+        MY_ID++;  // increase my ID
+        count = 0;
+      }
+      else {
+        // Clear message
+        while (UART1_InCharNonBlock()) {
+              Clock_Delay1ms(10);
+            }
+      }
+    }
+    else {
+      Clock_Delay1ms(1000);
+      count++;
+    }
+  }
+
+  // IDs sssigned, continue with application
+  SSD1306_OutClear();
+  SSD1306_SetCursor(0,0);
+  SSD1306_OutChar(MY_ID);
+  LaunchPad_Output(RED);
+  Clock_Delay1ms(3000);
+  LaunchPad_Output(0);
   EnableInterrupts();
 
   // Application, loop forever
   while (1) {
-    WaitForInterrupt();
+    // Check for outgoing data that needs to be sent out
+    while (G_UNSENT_BYTES > 0) {
+      LaunchPad_Output(BLUE);
+      UART1_OutChar(*G_SEND_PTR);
+
+      UART0_OutUDec(*G_SEND_PTR);
+      UART0_OutString('\n\r');
+
+      G_SEND_PTR++;
+      G_UNSENT_BYTES--;
+    }
+
+    // Check UART1 for incoming data
+    if (UART1_InStatus()) {
+      in = UART1_InChar();
+      // Check recv buffer for incoming data that needs to be processed
+      if (G_UNRECV_BYTES > 0) {
+        LaunchPad_Output(GREEN);
+        *G_RECV_PTR = in;
+        
+        UART0_OutUDec(*G_RECV_PTR);
+        UART0_OutString('\n\r');
+
+
+        G_UNRECV_BYTES--;
+
+        // Once recv buffer reaches 0, check for error
+        if (G_UNRECV_BYTES == 0) {
+          // Calculate error from msg
+          error = Len ^ G_RECV_BUFF[0];
+          // Compare to transmitted error
+          if (error != in) {
+            LaunchPad_Output(RED);
+          }
+          else {
+            SSD1306_SetCursor(0,1);
+            SSD1306_OutString(G_RECV_BUFF);
+          }
+        }
+
+        G_RECV_PTR++;
+      }
+      else {
+        // Parse incoming message and set recv buffer
+        if (in == HEADER) {       // Check correct header
+          in = UART1_InChar();
+          if (in == MY_ID)  {     // Check message is for me
+            Len = UART1_InChar();    // Retrieve length
+            G_UNRECV_BYTES = Len + 1;   // Size of data + error byte
+            G_RECV_PTR = G_RECV_BUFF;   // Pointer to start of buffer
+          }
+          else {          // Message not for me
+            // Clear message
+            while (UART1_InCharNonBlock()) {
+              Clock_Delay1ms(10);
+            }
+            G_UNRECV_BYTES = 0;
+          }
+        }
+        else {          // Incorrect header
+            // Clear message
+            while (UART1_InCharNonBlock()) {
+              Clock_Delay1ms(10);
+            }
+            G_UNRECV_BYTES = 0;
+        }
+      }
+    }
+
+    // Turn LED off when not sending or receiving
+    if (G_UNSENT_BYTES == 0 && G_UNRECV_BYTES == 0) {
+      Clock_Delay1ms(100);
+      LaunchPad_Output(0);
+    }
+
     MainCount++;
+  }
+}
+
+
+// ******************************************************************************
+// ******************************************************************************
+// ******************************************************************************
+#define trampoline  2
+
+//********SysTick_Handler*****************
+// ISR for SysTick timer, runs every 10ms.
+// Trampoline for selecting handler.
+// Inputs: none
+// Outputs: none
+void SysTick_Handler(void) {
+  switch (trampoline) {
+    case 0:
+      SysTick_Handler_1();
+      break;
+    case 1:
+      SysTick_Handler_5E();
+      break;
+    case 2:
+      SysTick_Handler_5F();
+      break;
+  }
+}
+
+//********Trampoline for selecting main*****************
+void main() {
+  switch (trampoline) {
+    case 0:
+      main_1();
+      break;
+    case 1:
+      main_5E();
+      break;
+    case 2:
+      main_5F();
+      break;
   }
 }
