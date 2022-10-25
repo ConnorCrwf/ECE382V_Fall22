@@ -79,6 +79,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "..\inc\UART1.h"
 #include "..\inc\SSD1306_I2C.h"
 #include "..\inc\TimerA0.h"
+#include "..\inc\GPIO.h"
 #include "Seeed_HC12main.h"
 
 
@@ -146,8 +147,8 @@ void SysTick_Handler_1(void){
   uint8_t ThisInput = LaunchPad_Input();   // either button
   if(ThisInput){
     if((Time%100) == 0){ // 1 Hz
-      P4->OUT ^= 0x01;      // toggle P4.0
-      P4->OUT ^= 0x01;      // toggle P4.0
+      P1->OUT ^= 0x80;      // toggle P1.7
+      P1->OUT ^= 0x80;      // toggle P1.7
       HC12data = HC12data^0x01; // toggle '0' to '1'
       if(HC12data == 0x31){
         Message = 1; // S1
@@ -157,13 +158,13 @@ void SysTick_Handler_1(void){
         Flag = 1;    // signal
       }
       UART1_OutChar(HC12data);
-      P4->OUT ^= 0x01;      // toggle P4.0
+      P1->OUT ^= 0x80;      // toggle P1.7
     }
   }
   in = UART1_InCharNonBlock();
   if(in){
-    P4->OUT ^= 0x01;      // toggle P4.0
-    P4->OUT ^= 0x01;      // toggle P4.0
+    P1->OUT ^= 0x80;      // toggle P1.7
+    P1->OUT ^= 0x80;      // toggle P1.7
     switch(in){
       case '0':
         Message = 2; // R0
@@ -176,7 +177,7 @@ void SysTick_Handler_1(void){
         LaunchPad_Output(BLUE);
         break;
     }
-    P4->OUT ^= 0x01;      // toggle P4.0
+    P1->OUT ^= 0x80;      // toggle P1.7
   }
 
   LEDOUT ^= 0x01;       // toggle P1.0
@@ -190,6 +191,7 @@ void main_1(void){int num=0;
   Time = MainCount = 0;
   SysTick_Init(480000,2);   // set up SysTick for 100 Hz interrupts
   LaunchPad_Init();         // P1.0 is red LED on LaunchPad
+  GPIO_Init();              // P1.7 is GPIO output
   UART0_Initprintf();       // serial port to PC for debugging
   SSD1306_Init(SSD1306_SWITCHCAPVCC);
   SSD1306_OutClear();
@@ -414,6 +416,7 @@ void main_5F(void) {
   uint8_t count = 0;
   uint8_t flag = 0;
   uint8_t in, error;
+  uint8_t profile_flag = 1;
 
   DisableInterrupts();  // Prevent interrupts during initialization
 
@@ -421,6 +424,7 @@ void main_5F(void) {
   Clock_Init48MHz();        // running on crystal
   SysTick_Init(480000, 1);  // SysTick interrupts at 100Hz, priority 1
   LaunchPad_Init();         // P1.0 is red LED on LaunchPad
+  GPIO_Init();              // P1.7 is GPIO output
   UART0_Initprintf();       // serial port to PC for debugging
   SSD1306_Init(SSD1306_SWITCHCAPVCC);
 
@@ -485,15 +489,26 @@ void main_5F(void) {
   // Application, loop forever
   while (1) {
     // Check for outgoing data that needs to be sent out
-    while (G_UNSENT_BYTES > 0) {
+    if (G_UNSENT_BYTES > 0) {
+      if (profile_flag) {
+        // Profile
+        P1->OUT ^= 0x80;      // toggle P1.7
+        P1->OUT ^= 0x80;      // toggle P1.7
+        profile_flag = 0;
+      }
+
       LaunchPad_Output(BLUE);
       UART1_OutChar(*G_SEND_PTR);
 
       UART0_OutUDec(*G_SEND_PTR);
-      UART0_OutString('\n\r');
+      UART0_OutString("\n\r");
 
       G_SEND_PTR++;
       G_UNSENT_BYTES--;
+      if (G_UNSENT_BYTES == 1) {
+        P1->OUT ^= 0x80;      // toggle P1.7
+        profile_flag = 1;
+      }
     }
 
     // Check UART1 for incoming data
@@ -505,13 +520,16 @@ void main_5F(void) {
         *G_RECV_PTR = in;
         
         UART0_OutUDec(*G_RECV_PTR);
-        UART0_OutString('\n\r');
+        UART0_OutString("\n\r");
 
 
         G_UNRECV_BYTES--;
 
         // Once recv buffer reaches 0, check for error
         if (G_UNRECV_BYTES == 0) {
+          // Profile
+          P1->OUT ^= 0x80;      // toggle P1.7
+
           // Calculate error from msg
           error = Len ^ G_RECV_BUFF[0];
           // Compare to transmitted error
@@ -531,6 +549,10 @@ void main_5F(void) {
         if (in == HEADER) {       // Check correct header
           in = UART1_InChar();
           if (in == MY_ID)  {     // Check message is for me
+            // Profile
+            P1->OUT ^= 0x80;      // toggle P1.7
+            P1->OUT ^= 0x80;      // toggle P1.7
+
             Len = UART1_InChar();    // Retrieve length
             G_UNRECV_BYTES = Len + 1;   // Size of data + error byte
             G_RECV_PTR = G_RECV_BUFF;   // Pointer to start of buffer
