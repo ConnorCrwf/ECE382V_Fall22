@@ -63,17 +63,24 @@ DEVICE_NAME = "Shape the World"
 
 #MSP432/CC2650 characteristic uuids
 
-HALFWORD_UUID_R = "0000fff2" #read-only characteristic for the HalfWordData data (switches). 
-WORD_UUID_W = "0000fff3" #write-only characteristic for the WordData data (LED). 
-SWITCH1_UUID_N = "0000fff7" #notify characteristic Switch1 that can be subscribed to to get the data
-TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData data (Temperature).
+# Characteristics (Values read by Client)
+# HALFWORD_UUID_R = "0000fff2" #read-only characteristic for the HalfWordData data (switches). 
+# WORD_UUID_W = "0000fff3" #write-only characteristic for the WordData data (LED). 
 TIME_UUID_R = "0000fff2" # read-only characteristic for the WordData data (Time).
-LED_UUID_W = "0000fff8" # read-only characteristic for the WordData data (LED). 
-LIGHT_UUID_N = "0000fff9" # notify characteristic Light that can be subscribed to to get the data.
-# JOYSTICK_UUID_N = "0000fff7" # notify characteristic Joystick that can be subscribed to to get the data.
-DISTANCE_UUID_N = "0000ff12" # notify characteristic Distance that can be subscribed to to get the data.
-JOYSTICK_X_UUID_N = "0000fff7"
-JOYSTICK_Y_UUID_N = "0000fff5" 
+SOUND_UUID_R = "0000fff3" # read-only characteristic for the WordData data (Time).
+TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData data (Temperature).
+
+# Characteristics (Values written by Client)
+LED_UUID_W = "0000fff6" # read-only characteristic for the WordData data (LED). 
+# DISTANCE_UUID_N = "0000ff7" # notify characteristic Distance that can be subscribed to to get the data.
+
+# Read Notify Characteristics
+LIGHT_UUID_N = "0000fffA" # notify characteristic Light that can be subscribed to to get the data.
+# JOYSTICK_UUID_N = "0000fffB" # notify characteristic Joystick that can be subscribed to to get the data.
+JOYSTICK_X_UUID_N = "0000fffB"
+JOYSTICK_Y_UUID_N = "0000fffC" 
+SWITCH1_UUID_N = "0000fffD" #notify characteristic Switch1 that can be subscribed to to get the data
+
 
 # To discover characteristics, 
 # connect and then call client.get_charactistics
@@ -135,6 +142,9 @@ def notification_handler_joystick_y(sender, data):
 
 
 #Asynchronous functions
+async def subscribe_light(client): #subscribes to a notification used for distance sensors
+    await client.start_notify(LIGHT_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_light)
+
 async def subscribe_joystickX(client): #subscribes to a notification used for distance sensors
     await client.start_notify(JOYSTICK_X_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_x)
 
@@ -199,20 +209,21 @@ async def pygame_gui():
         print(client_g)
         #print("Failed to connect, trying again")
 
-    #Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
-    # print("Trying to subscribe to Light data")
-    # await subscribe(client_g, LIGHT_UUID_N)
-    # print("Subscribed to Light data")
+    # Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
+    print("Trying to subscribe to Light data")
+    await subscribe_light(client_g)
+    print("Subscribed to Light data")
 
+    
     print("Trying to subscribe to Joystick X data")
     await subscribe_joystickX(client_g)
     print("Subscribed to Joystick X data")
-    sleep(0.3)
+    # sleep(0.3)
 
     print("Trying to subscribe to Joystick Y data")
     await subscribe_joystickY(client_g)
     print("Subscribed to Joystick Y data")
-
+    
     # print("Trying to subscribe to Joystick Y data")
     # await subscribe(client_g, JOYSTICK_Y_UUID_N)
     # print("Subscribed to Joystick Y data")
@@ -285,6 +296,7 @@ async def pygame_gui():
                 pygame.draw.line(screen,pygame.Color(255,255,0),(t,y),(t,y))
             '''
             # Display Joystick Value and Draw it 
+            print ("Light =", Light_g)
             print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
             
 

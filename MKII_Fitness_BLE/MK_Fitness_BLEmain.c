@@ -95,7 +95,7 @@ int32_t NewData;  // true when new numbers to display on top of LCD
 int32_t LCDmutex; // exclusive access to LCD
 int32_t I2Cmutex; // exclusive access to I2C
 int ReDrawAxes = 0;         // non-zero means redraw axes on next display task
-int Send0Flag=0;
+int SendFlag=0;
 int Send1Flag_Joy=0;
 
 #define Accelerometer 0
@@ -162,6 +162,7 @@ void Task0(void){
     OS_Signal(&NewData); // makes task5 run every 1 sec
     time = 0;
   }
+
 }
 /* ****************************************** */
 /*          End of Task0 Section              */
@@ -212,6 +213,20 @@ void Task1(void){uint32_t squared;
   }
   Time++; // in 100ms units
 }
+
+// *********Task8*********
+// publishes all data at a set period of 50ms
+// Inputs:  none
+// Outputs: none
+void Task8(void){
+  SendFlag=1;
+    // count++;
+    // if(count==5){
+    //   count=0;
+    // }
+}
+
+
 /* ****************************************** */
 /*          End of Task1 Section              */
 /* ****************************************** */
@@ -460,11 +475,6 @@ void Task5(void){int32_t soundSum; int count=0;
     }
 //end of debug code
     OS_Signal(&LCDmutex);
-    count++;
-    if(count==5){
-      Send0Flag=1;
-      count=0;
-    }
   }
 }
 /* ****************************************** */
@@ -512,24 +522,24 @@ void Task7(void){
   while(1){
     Count7++;
     AP_BackgroundProcess();
-    if(Send0Flag){
-      AP_SendNotification(0);
-      Send0Flag=0;
-    }
-    // I think the frequency that this happens is based on how often the master queries. Doesn't make sense to use a Send0Flag 
-    // if(AP_GetNotifyCCCD(1)) {
-    //   OutValue("\n\rJoystick Dat=",JoystickData);
-    //   AP_SendNotification(1); 
-    // }
-    if(AP_GetNotifyCCCD(1)) {
-      OutValue("\n\rJoystick X=",JoystickX);
-      AP_SendNotification(1); 
-    }
-    if(AP_GetNotifyCCCD(2)) {
-      OutValue("\n\rJoystick Y=",JoystickY);
-      AP_SendNotification(2);
-    }
+    if(SendFlag){
+      if(AP_GetNotifyCCCD(0)) {
+        // OutValue("\n\rLight data=",LightData);
+        AP_SendNotification(0);
+      }
 
+      if(AP_GetNotifyCCCD(1)) {
+        // OutValue("\n\rJoystick X=",JoystickX);
+        AP_SendNotification(1);
+      }
+      if(AP_GetNotifyCCCD(2)) {
+        // OutValue("\n\rJoystick X=",JoystickY);
+        AP_SendNotification(2);
+      }
+    SendFlag=0;
+    }
+    
+    //Could this line be an issue?
     WaitForInterrupt();
   }
 }
@@ -565,7 +575,8 @@ void Bluetooth_ReadTemperature(void){ // called on a SNP Characteristic Read Ind
   OutValue("\n\rRead Temperature=",TemperatureHalfwordData);
 }
 void Bluetooth_ReadLight(void){ // called on a SNP Characteristic Read Indication for characteristic Light
-  OutValue("\n\rRead Light=",LightData);
+  // OutValue("\n\rRead Light=",LightData);
+  OutValue("\n\rCCCD Light CCD is",AP_GetNotifyCCCD(0));
 }
 void Bluetooth_ReadPlotState(void){ // called on a SNP Characteristic Read Indication for characteristic PlotState
   OutValue("\n\rRead PlotState=",PlotState);
@@ -596,7 +607,7 @@ void Bluetooth_ReadJoystickX(void){ // called on SNP CCCD Updated Indication for
 }
 
 void Bluetooth_ReadJoystickY(void){ 
-  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(2));  
+  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(2));
 }
 
 
@@ -613,25 +624,25 @@ void Bluetooth_Init(void){volatile int r;
   Lab6_GetStatus();  // optional
   Lab6_GetVersion(); // optional
   Lab6_AddService(0xFFF0); 
+  //Characteristics (Values read by Client)
   Lab6_AddCharacteristic(0xFFF1,2,&PlotState,0x03,0x0A,"PlotState",&Bluetooth_ReadPlotState,&Bluetooth_WritePlotState);
   Lab6_AddCharacteristic(0xFFF2,4,&Time,0x01,0x02,"Time",&Bluetooth_ReadTime,0);
   Lab6_AddCharacteristic(0xFFF3,4,&SoundRMS,0x01,0x02,"Sound",&Bluetooth_ReadSound,0);
   Lab6_AddCharacteristic(0xFFF4,2,&TemperatureHalfwordData,0x01,0x02,"Temperature",&Bluetooth_ReadTemperature,0);
-  // Lab6_AddCharacteristic(0xFFF5,4,&LightData,0x01,0x02,"Light",&Bluetooth_ReadLight,0);
-  Lab6_AddCharacteristic(0xFFF6,2,&edXNum,0x02,0x08,"edXNum",0,&TExaS_Grade);
-  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
-
-  // New Characteristics
-  // Switch1 = 0; 
-  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Switch1,"Button 1",&Bluetooth_Switch1);
-  Lab6_AddCharacteristic(0xFFF8,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
-  Lab6_AddNotifyCharacteristic(0xFFF9,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
+  Lab6_AddCharacteristic(0xFFF5,2,&edXNum,0x02,0x08,"edXNum",0,&TExaS_Grade);
   
-  // Lab6_AddNotifyCharacteristic(0xFFF7,4,&JoystickData,"Joystick",&Bluetooth_ReadJoystick);   // Notifcation value is sent by Task 7. Then function handles message.
-  Lab6_AddNotifyCharacteristic(0xFFF7,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
-  Lab6_AddNotifyCharacteristic(0xFFF5,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
+  //Characteristics (Values written by Client)
+  Lab6_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED); 
 
-  // TODO Make notify for light and plot it to pygui
+  // Notify Characteristics (Values subscribed to by Client based on publish rate of each task)
+  // Switch1 = 0;
+  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
+  Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
+  // Lab6_AddNotifyCharacteristic(0xFFF7,4,&JoystickData,"Joystick",&Bluetooth_ReadJoystick);   // Notifcation value is sent by Task 7. Then function handles message.
+  Lab6_AddNotifyCharacteristic(0xFFFB,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
+  Lab6_AddNotifyCharacteristic(0xFFFC,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
+  // Lab6_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button 1",&Bluetooth_Switch1);
+
 
   Lab6_RegisterService();
   Lab6_StartAdvertisement();
@@ -651,7 +662,7 @@ void Bluetooth_Init(void){volatile int r;
 // Task3  switch/buzzer  periodically every 10 ms
 // Task4  temperature    periodically every 1 sec
 // Task5  numbers on LCD after Task0 runs SOUNDRMSLENGTH times (every 1 sec effectively)
-// Task6  light          periodically every 800 ms
+// Task6  light          periodically every 800 ms, comes from line OS_Sleep(800);
 // Task7  dummy          no timing requirement
 // Remember that you must have exactly one main() function, so
 // to work on this step, you must rename all other main()
@@ -678,9 +689,10 @@ int main(void){
   OS_InitSemaphore(&I2Cmutex, 1); // 1 means free
   OS_FIFO_Init();                 // initialize FIFO used to send data between Task1 and Task2
   // Task 0 should run every 1ms
-  OS_AddPeriodicEventThread(&Task0, 10);
+  OS_AddPeriodicEventThread(&Task0, 1);
   // Task 1 should run every 100ms
   OS_AddPeriodicEventThread(&Task1, 100);
+   OS_AddPeriodicEventThread(&Task8, 800);
   // // Task 8 should run every second
   // OS_AddPeriodicEventThread(&Task8, 1000);
   // Task2, Task3, Task4, Task5, Task6, Task7 are main threads
@@ -692,6 +704,7 @@ int main(void){
   // if you hold either switch down, it will pause so you can see grader output
   while((BSP_Button1_Input()==0)||(BSP_Button2_Input())==0){}; 
   Bluetooth_Init();
+  //This is what controls the execution of the threads, they're not periodic. They are round-robin (one after the other)
   OS_Launch(BSP_Clock_GetFreq()/THREADFREQ); // doesn't return, interrupts enabled in here
   return 0;             // this never executes
 }
