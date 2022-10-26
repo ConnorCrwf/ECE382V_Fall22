@@ -4,6 +4,7 @@ bleak 0.13.0
 pygame 2.0.2
 
 1) Install Python 3.9, bleak, and pygame
+install python from here https://www.python.org/downloads/release/python-390/
 py -m pip install bleak==0.13.0
 py -m pip install pygame==2.0.2
 

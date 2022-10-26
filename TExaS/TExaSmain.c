@@ -61,7 +61,8 @@ int scopeMain(void){ //scopeMain(void){
   }
 }
 
-int LogicAnalyzerMain(void){
+//normally Logic Analyzer Main
+int main(void){
 uint32_t status,delay,data;
   Clock_Init48MHz(); // makes bus clock 48 MHz
   LaunchPad_Init();  // use buttons to step through frequencies
@@ -83,7 +84,7 @@ uint32_t status,delay,data;
 
 //square frequency in Hz on P4.5, used in Lab 2
 uint32_t const FreqTab[4]={100, 500, 720, 1000}; // Hz
-int main(void){ //Lab2main(void){
+int main1(void){ //Lab2main(void){
     int i; uint32_t in,last;
   Clock_Init48MHz(); // makes bus clock 48 MHz
   LaunchPad_Init();  // use buttons to step through frequencies

@@ -796,7 +796,7 @@ uint32_t AP_GetVersion(void){volatile int r;
   return (RecvBuf[5]<<8)+(RecvBuf[6]);
 }
 // ****AP_BackgroundProcess****
-// handle incoming SNP frames
+// handle incoming SNP frames from CC2650
 // Inputs:  none
 // Outputs: none
 void AP_BackgroundProcess(void){

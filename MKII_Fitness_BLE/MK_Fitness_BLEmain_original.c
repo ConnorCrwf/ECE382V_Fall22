@@ -55,7 +55,6 @@
 #include "Texas.h"
 #include "../inc/AP.h"
 #include "AP_Lab6.h"
-#include "../inc/LaunchPad.h"
 //**************WARNING************************************
 //***Edit GPIO.h line 153 to match your BLE option*********
 //*********************************************************
@@ -75,28 +74,12 @@ uint32_t SoundRMS;            // Root Mean Square average of most recent sound s
 uint32_t LightData;           // 100 lux
 int32_t  TemperatureData;     // 0.1C
 uint16_t TemperatureHalfwordData; // 1C
-// typedef struct joydata {
-//   uint32_t x:10;
-//   uint32_t pad:6;
-//   uint32_t y:10;
-//   uint32_t pad2:5;
-//   uint32_t sel:1;
-// } joydata_t;
-// joydata_t JoystickData;
-int32_t JoystickX;
-int32_t JoystickY;
-
-// New variables
-uint16_t Switch1;       // 16-bit notify data from Button 1
-uint16_t LED;           // 16-bit write-only data to LED
-
 // semaphores
 int32_t NewData;  // true when new numbers to display on top of LCD
 int32_t LCDmutex; // exclusive access to LCD
 int32_t I2Cmutex; // exclusive access to I2C
 int ReDrawAxes = 0;         // non-zero means redraw axes on next display task
 int Send0Flag=0;
-int Send1Flag_Joy=0;
 
 #define Accelerometer 0
 #define Microphone 1
@@ -116,19 +99,17 @@ uint16_t PlotState = Accelerometer;
 #define TOPNUMCOLOR LCD_ORANGE
 //------------ end of Global variables shared between tasks -------------
 
-//---------------- Task0 samples sound from microphone and joystick ----------------
+//---------------- Task0 samples sound from microphone ----------------
 // Event thread run by OS in real time at 1000 Hz
 #define SOUNDRMSLENGTH 1000 // number of samples to collect before calculating RMS (may overflow if greater than 4104)
 int16_t SoundArray[SOUNDRMSLENGTH];
-
 // *********Task0_Init*********
 // initializes microphone
-// Task0 measures sound intensity and joystick data
+// Task0 measures sound intensity
 // Inputs:  none
 // Outputs: none
 void Task0_Init(void){
   BSP_Microphone_Init();
-  BSP_Joystick_Init();
   SoundRMS = 0;
 }
 // *********Task0*********
@@ -145,16 +126,6 @@ void Task0(void){
   BSP_Microphone_Input(&SoundData);
   soundSum = soundSum + (int32_t)SoundData;
   SoundArray[time] = SoundData;
-
-  // Joystick
-  uint16_t x, y, sel;
-  BSP_Joystick_Input(&x,&y,&sel);
-  // JoystickData.x = x;
-  // JoystickData.y = y;
-  // JoystickData.sel = sel;
-  JoystickX = x;
-  JoystickY = y;
-
   time = time + 1;
   if(time == SOUNDRMSLENGTH){
     SoundAvg = soundSum/SOUNDRMSLENGTH;
@@ -252,7 +223,7 @@ void Task2(void){uint32_t data;
   drawaxes();
   while(1){
 
-
+    
     data = OS_FIFO_Get();
     TExaS_Task2();     // records system time in array, toggles virtual logic analyzer
     Profile_Toggle2(); // viewed by a real logic analyzer to know Task2 started
@@ -453,7 +424,6 @@ void Task5(void){int32_t soundSum; int count=0;
     BSP_LCD_SetCursor(16, 0); BSP_LCD_OutUDec4(LightData,         LIGHTCOLOR);
     BSP_LCD_SetCursor(16, 1); BSP_LCD_OutUDec4(SoundRMS,          SOUNDCOLOR);
     BSP_LCD_SetCursor(16,12); BSP_LCD_OutUDec4(Time/10,           TOPNUMCOLOR);
-    //add in one for joystick
 //debug code
     if(LostTask1Data){
       BSP_LCD_SetCursor(0, 12); BSP_LCD_OutUDec4(LostTask1Data, BSP_LCD_Color565(255, 0, 0));
@@ -516,20 +486,6 @@ void Task7(void){
       AP_SendNotification(0);
       Send0Flag=0;
     }
-    // I think the frequency that this happens is based on how often the master queries. Doesn't make sense to use a Send0Flag 
-    // if(AP_GetNotifyCCCD(1)) {
-    //   OutValue("\n\rJoystick Dat=",JoystickData);
-    //   AP_SendNotification(1); 
-    // }
-    if(AP_GetNotifyCCCD(1)) {
-      OutValue("\n\rJoystick X=",JoystickX);
-      AP_SendNotification(1); 
-    }
-    if(AP_GetNotifyCCCD(2)) {
-      OutValue("\n\rJoystick Y=",JoystickY);
-      AP_SendNotification(2);
-    }
-
     WaitForInterrupt();
   }
 }
@@ -537,13 +493,6 @@ void Task7(void){
 /*          End of Task7 Section              */
 /* ****************************************** */
 
-// //---------------- Task8 samples LaunchPad Switch 1 ----------------
-// void Task8(void){
-//   Switch1 = LaunchPad_Input()&0x01;   // Button 1 
-// }
-// /* ****************************************** */
-// /*          End of Task8 Section              */
-// /* ****************************************** */
 
 // ********OutValue**********
 // Debugging dump of a data value to virtual serial port to PC
@@ -576,34 +525,8 @@ void Bluetooth_WritePlotState(void){ // called on a SNP Characteristic Write Ind
   BSP_Buzzer_Set(512);           // beep until next call of task3
   ReDrawAxes = 1;                // redraw axes on next call of display task
 }
-
 void Bluetooth_Steps(void){ // called on SNP CCCD Updated Indication
-  OutValue("\n\rCCCD Steps=",AP_GetNotifyCCCD(0));
-}
-
-// void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
-//   OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(0));
-// }
-
-void Bluetooth_ReadJoystick(void){ // called on SNP CCCD Updated Indication for characteristic Joystick
-  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(1));  //when this is called the CCCD value should be zero but it should change
-  //  after this to a non-zero number temporarily, allowin AP_SendNotification(1) to send latest data since it only does so based on CCCD value being nonzero
-}
-
-void Bluetooth_ReadJoystickX(void){ // called on SNP CCCD Updated Indication for characteristic Joystick
-  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(1));  //when this is called the CCCD value should be zero but it should change
-  //  after this to a non-zero number temporarily, allowin AP_SendNotification(1) to send latest data since it only does so based on CCCD value being nonzero
-}
-
-void Bluetooth_ReadJoystickY(void){ 
-  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(2));  
-}
-
-
-//Changes LED based on global variable that is shared through Bluetooth
-void Bluetooth_LED(void){
-  LaunchPad_Output(LED);  // set LEDs with bottom bits
-  OutValue("\n\rLED Data=",LED);
+  OutValue("\n\rCCCD=",AP_GetNotifyCCCD(0));
 }
 extern uint16_t edXNum; // actual variable within TExaS
 void Bluetooth_Init(void){volatile int r;
@@ -617,22 +540,9 @@ void Bluetooth_Init(void){volatile int r;
   Lab6_AddCharacteristic(0xFFF2,4,&Time,0x01,0x02,"Time",&Bluetooth_ReadTime,0);
   Lab6_AddCharacteristic(0xFFF3,4,&SoundRMS,0x01,0x02,"Sound",&Bluetooth_ReadSound,0);
   Lab6_AddCharacteristic(0xFFF4,2,&TemperatureHalfwordData,0x01,0x02,"Temperature",&Bluetooth_ReadTemperature,0);
-  // Lab6_AddCharacteristic(0xFFF5,4,&LightData,0x01,0x02,"Light",&Bluetooth_ReadLight,0);
+  Lab6_AddCharacteristic(0xFFF5,4,&LightData,0x01,0x02,"Light",&Bluetooth_ReadLight,0);
   Lab6_AddCharacteristic(0xFFF6,2,&edXNum,0x02,0x08,"edXNum",0,&TExaS_Grade);
-  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
-
-  // New Characteristics
-  // Switch1 = 0; 
-  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Switch1,"Button 1",&Bluetooth_Switch1);
-  Lab6_AddCharacteristic(0xFFF8,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
-  Lab6_AddNotifyCharacteristic(0xFFF9,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
-  
-  // Lab6_AddNotifyCharacteristic(0xFFF7,4,&JoystickData,"Joystick",&Bluetooth_ReadJoystick);   // Notifcation value is sent by Task 7. Then function handles message.
-  Lab6_AddNotifyCharacteristic(0xFFF7,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
-  Lab6_AddNotifyCharacteristic(0xFFF5,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
-
-  // TODO Make notify for light and plot it to pygui
-
+  Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
   Lab6_RegisterService();
   Lab6_StartAdvertisement();
   Lab6_GetStatus();
@@ -650,16 +560,14 @@ void Bluetooth_Init(void){volatile int r;
 // Task2  plot on LCD    after Task1 finishes
 // Task3  switch/buzzer  periodically every 10 ms
 // Task4  temperature    periodically every 1 sec
-// Task5  numbers on LCD after Task0 runs SOUNDRMSLENGTH times (every 1 sec effectively)
+// Task5  numbers on LCD after Task0 runs SOUNDRMSLENGTH times
 // Task6  light          periodically every 800 ms
 // Task7  dummy          no timing requirement
 // Remember that you must have exactly one main() function, so
 // to work on this step, you must rename all other main()
 // functions in this file.
-int main(void){
+ewint main(void){
   OS_Init();
-  LaunchPad_Init();         // P1.0 is red LED on LaunchPad
-  LaunchPad_Output(0);
   Profile_Init();  // initialize the 7 hardware profiling pins
   Task0_Init();    // microphone init
   Task1_Init();    // accelerometer init
@@ -678,11 +586,9 @@ int main(void){
   OS_InitSemaphore(&I2Cmutex, 1); // 1 means free
   OS_FIFO_Init();                 // initialize FIFO used to send data between Task1 and Task2
   // Task 0 should run every 1ms
-  OS_AddPeriodicEventThread(&Task0, 10);
+  OS_AddPeriodicEventThread(&Task0, 1);
   // Task 1 should run every 100ms
   OS_AddPeriodicEventThread(&Task1, 100);
-  // // Task 8 should run every second
-  // OS_AddPeriodicEventThread(&Task8, 1000);
   // Task2, Task3, Task4, Task5, Task6, Task7 are main threads
   OS_AddThreads(&Task2, &Task3, &Task4, &Task5, &Task6, &Task7);
   // when grading change 1000 to 4-digit number from edX

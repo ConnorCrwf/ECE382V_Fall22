@@ -49,14 +49,13 @@ Switch1 versus time will also be logged into switch.txt file
 import asyncio
 #sys useful functions like sys.exit
 import sys
-from time import sleep
 from bleak import BleakScanner
 from bleak import BleakClient
 import struct
 import pygame
 
 #device name to connect to
-DEVICE_NAME = "Shape the World"
+DEVICE_NAME = "Shape the World 001"
 
 #If the device address is known then you can also connect directly via the address instead of using the name
 #DEVICE_ADDR = "A0:E6:F8:C4:92:82"
@@ -65,34 +64,21 @@ DEVICE_NAME = "Shape the World"
 
 HALFWORD_UUID_R = "0000fff2" #read-only characteristic for the HalfWordData data (switches). 
 WORD_UUID_W = "0000fff3" #write-only characteristic for the WordData data (LED). 
-SWITCH1_UUID_N = "0000fff7" #notify characteristic Switch1 that can be subscribed to to get the data
-TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData data (Temperature).
-TIME_UUID_R = "0000fff2" # read-only characteristic for the WordData data (Time).
-LED_UUID_W = "0000fff8" # read-only characteristic for the WordData data (LED). 
-LIGHT_UUID_N = "0000fff9" # notify characteristic Light that can be subscribed to to get the data.
-# JOYSTICK_UUID_N = "0000fff7" # notify characteristic Joystick that can be subscribed to to get the data.
-DISTANCE_UUID_N = "0000ff12" # notify characteristic Distance that can be subscribed to to get the data.
-JOYSTICK_X_UUID_N = "0000fff7"
-JOYSTICK_Y_UUID_N = "0000fff5" 
-
+SWITCH1_UUID_N = "0000fff4" #notify characteristic Switch1 that can be subscribed to to get the data
 # To discover characteristics, 
 # connect and then call client.get_charactistics
 
 VENDOR_SPECIFIC_UUID = "-0000-1000-8000-00805f9b34fb" #this is appended to the end of the UUIDs above to create the complete characteristic UUID
 
 #Map keys to binary values. Avoid a lot of if statements. The key pressed indexes into the dictionary to get the value 
-# KEYS_MAP = {pygame.K_0:0, pygame.K_1:1, pygame.K_2:2,pygame.K_3:3,pygame.K_4:4,pygame.K_5:5,pygame.K_6:6,pygame.K_7:7, pygame.K_s:11}
-KEYS_MAP = {pygame.K_0:0, pygame.K_1:1, pygame.K_2:2,pygame.K_3:3,pygame.K_4:4,pygame.K_5:5,pygame.K_6:6,pygame.K_7:7,pygame.K_s:11,pygame.K_t:12,pygame.K_u:13}
+KEYS_MAP = {pygame.K_0:0, pygame.K_1:1, pygame.K_2:2,pygame.K_3:3,pygame.K_4:4,pygame.K_5:5,pygame.K_6:6,pygame.K_7:7, pygame.K_s:11}
 
 FRAMERATE = 1/30 #set frame rate for screen - 30 fps
 
 #globals to share information between async tasks
 client_g = None #store client connection
 current_keys_g = 0 #stores the state of the key presses
-Dist_g = 0 
-Light_g = 0 
-Joystick_X_g = 0
-Joystick_Y_g = 0
+Switch_g = 0 #the state of the LaunchPad switches
 Halfword_g = 0
 Word_g = 0
 Buffer = []
@@ -101,51 +87,25 @@ Semaphore = 0
 
 
 #Helper functions
-def notification_handler_dist(sender, data): #Callback function for the subscribed notification. Unpacks the distance data and updates the global distance variable
-    global Dist_g
+def notification_handler(sender, data): #Callback function for the subscribed notification. Unpacks the distance data and updates the global distance variable
+    global Switch_g
     global Semaphore
     #print("{0}: {1}".format(sender, data))
-    RawData  = struct.unpack(">H", data)  # unpack 1 unsigned long
+    RawData  = struct.unpack(">H", data)  # unpack 1 unsigned short
     #print (data)
     #print (RawData)
-    Dist_g = RawData[0]  #update global for the main loop
+    Switch_g = RawData[0]  #update global for the main loop
     Semaphore = 1
-
-def notification_handler_light(sender, data): #Callback function for the subscribed notification. Unpacks the light data and updates the global light variable
-    global Light_g
-    global Semaphore
-    RawData  = struct.unpack(">I", data)  # unpack 1 unsigned long
-    Light_g = RawData[0]  #update global for the main loop
-    Semaphore = 1
-
-def notification_handler_joystick_x(sender, data): 
-    global Joystick_X_g
-    global Semaphore
-    raw  = struct.unpack(">I", data)  # unpack 1 unsigned long
-    Joystick_X_g = raw[0]  #update global for the main loop
-    Semaphore = 1
-
-def notification_handler_joystick_y(sender, data): 
-    global Joystick_Y_g
-    global Semaphore
-    raw  = struct.unpack(">I", data)  # unpack 1 unsigned long
-    Joystick_Y_g = raw[0]  #update global for the main loop
-    Semaphore = 1
-
-
 
 #Asynchronous functions
-async def subscribe_joystickX(client): #subscribes to a notification used for distance sensors
-    await client.start_notify(JOYSTICK_X_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_x)
-
-async def subscribe_joystickY(client): #subscribes to a notification used for distance sensors
-    await client.start_notify(JOYSTICK_Y_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_y)
+async def subscribe(client, handle): #subscribes to a notification used for distance sensors
+    await client.start_notify(handle + VENDOR_SPECIFIC_UUID, notification_handler)
 
 #Connects to device using the address. Can be used in place of connect_name() if the address is already known
 async def connect_addr(device_addr):
     client = BleakClient(device_addr)
     await client.connect()
-    print("Connected to Shape the World")
+    print("Connected to Shape the World 001")
 
     return client
 
@@ -155,34 +115,25 @@ async def connect_name(device_name):
 
     for d in devices:
         if d.name == device_name:
-            print("Found Shape the World")
+            print("Found Shape the World 001")
 
-            # connect to Shape the World
+            # connect to Shape the World 001
             client = BleakClient(d.address)
             await client.connect()
-            print("Connected to Shape the World")
+            print("Connected to Shape the World 001")
 
             return client
 
-# Reads the Temperature read only characteristic and updates the global halfword variable. 
-async def read_Temperature(client):
+#Reads the Halfword read only characteristic and updates the global distance variable. 
+async def read_Halfword(client):
     global Halfword_g
-    halfword_data = await client.read_gatt_char(TEMPERATURE_UUID_R + VENDOR_SPECIFIC_UUID)
+    halfword_data = await client.read_gatt_char(HALFWORD_UUID_R + VENDOR_SPECIFIC_UUID)
     #print (halfword_data)
     halfword_values = struct.unpack(">H", halfword_data) #unpack one 16-bit unsigned short
     #print (halfword_values)
     Halfword_g = halfword_values[0] #send to global
-    print ("Temperature = ", Halfword_g)
+    print ("Halfword = ", Halfword_g)
 
-# Reads the Time read only characteristic and updates the global word variable. 
-async def read_Time(client):
-    global Word_g
-    word_data = await client.read_gatt_char(TIME_UUID_R + VENDOR_SPECIFIC_UUID)
-    #print (halfword_data)
-    word_values = struct.unpack(">I", word_data) #unpack one 32-bit unsigned short
-    #print (halfword_values)
-    Word_g = word_values[0] #send to global
-    print ("Time = ", Word_g / 10)  # Time is in 100ms units
 
 #Main fuction that runs in a loop, starts the gui and updates the characteristics
 async def pygame_gui():
@@ -200,23 +151,10 @@ async def pygame_gui():
         #print("Failed to connect, trying again")
 
     #Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
-    # print("Trying to subscribe to Light data")
-    # await subscribe(client_g, LIGHT_UUID_N)
-    # print("Subscribed to Light data")
-
-    print("Trying to subscribe to Joystick X data")
-    await subscribe_joystickX(client_g)
-    print("Subscribed to Joystick X data")
-    sleep(0.3)
-
-    print("Trying to subscribe to Joystick Y data")
-    await subscribe_joystickY(client_g)
-    print("Subscribed to Joystick Y data")
-
-    # print("Trying to subscribe to Joystick Y data")
-    # await subscribe(client_g, JOYSTICK_Y_UUID_N)
-    # print("Subscribed to Joystick Y data")
-
+    print("Trying to subscribe to Switch1 data")
+    #subscribe to distance switch1 data
+    await subscribe(client_g, SWITCH1_UUID_N)
+    print("Subscribed to Switch1 data")
     f = open("switch.txt", "a")
 
     #init screen
@@ -244,38 +182,28 @@ async def pygame_gui():
             elif event.type == pygame.KEYDOWN and event.key in KEYS_MAP:
                 current_keys_g = KEYS_MAP[event.key] 
 
-        # If the new values are different then we write to the characteristic
+        #If the new values are different then we write to the characteristic
         if current_keys_g != current_keys_g_old:
-
-            # Reading
-            if current_keys_g == 11: # s
-                asyncio.create_task(read_Time(client_g))
-            elif current_keys_g == 12: # t
-                asyncio.create_task(read_Temperature(client_g))
-            # elif current_keys_g == 13: # u
-            #     asyncio.create_task(read_Joystick(client_g))
-            
-            # Writing
+            if current_keys_g == 11: #s
+                asyncio.create_task(read_Halfword(client_g))
             elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
                 Word_g = current_keys_g
-                print ("LED = ", Word_g)
-                value = struct.pack(">h", Word_g) # pack into binary, 1 unsigned long (32bit)
+                print ("Word = ", Word_g)
+                value = struct.pack(">h", Word_g) #pack into binary, 1 unsigned long (32bit)
                 #print (value)
-                asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
+                asyncio.create_task(client_g.write_gatt_char(WORD_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
 
         current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
-        # Update the screen on notification
+
+        #Update the screen on notification
         if Semaphore == 1:
             Semaphore = 0
             Time+=1
-            
-            # Display Light Value and Draw it 
-            # print ("Light =", Light_g)
-            '''
-            f.write("{}, {}\n".format(Time,Light_g))   	
+            print ("Switch1 =", Switch_g)
+            f.write("{}, {}\n".format(Time,Switch_g))   	
 
-            y = Light_g / 2;       # Modify this based on the range of values being read
+            y = 200-100*Switch_g;
             for i in range(10):			
                 t+=1
                 if t >= width:
@@ -283,11 +211,6 @@ async def pygame_gui():
                 pygame.draw.line(screen,pygame.Color(0,0,0),(t,Buffer[t]),(t,Buffer[t]))
                 Buffer[t] = y
                 pygame.draw.line(screen,pygame.Color(255,255,0),(t,y),(t,y))
-            '''
-            # Display Joystick Value and Draw it 
-            print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
-            
-
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important

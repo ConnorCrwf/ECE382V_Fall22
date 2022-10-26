@@ -443,6 +443,8 @@ void main_5F(void) {
   OutPacket.address = DEST_ID;
   OutPacket.length = sizeof(OutMessage);
   memcpy(OutPacket.data, OutMessage, OutPacket.length);
+  //how is this different than using CRC and what is the output of CRC?
+  //are we just comparing to a hard-coded message that we know?
   OutPacket.error = OutPacket.length ^ OutPacket.data[0];
 
   // Dynamic ID allocation
