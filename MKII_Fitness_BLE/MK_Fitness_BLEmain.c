@@ -102,6 +102,7 @@ int Send1Flag_Joy=0;
 #define Microphone 1
 #define Temperature 2
 #define Light 2
+#define Joystick 3
 
 uint16_t PlotState = Accelerometer;
 //color constants
@@ -254,6 +255,8 @@ void drawaxes(void){
     BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Temp", TEMPCOLOR, "", 0, TEMP_MAX, TEMP_MIN);
   } else if(PlotState == Light){
     BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Light", LIGHTCOLOR, "", 0, LIGHT_MAX, LIGHT_MIN);
+  } else if(PlotState == Joystick){
+    BSP_LCD_Drawaxes(AXISCOLOR, BGCOLOR, "Time", "Joystick", LIGHTCOLOR, "", 0, 1023, 0);
   }
   OS_Signal(&LCDmutex);  ReDrawAxes = 0;
 }
@@ -334,6 +337,8 @@ void Task2(void){uint32_t data;
       BSP_LCD_PlotPoint(TemperatureData, TEMPCOLOR);
     } else if(PlotState == Light){
       BSP_LCD_PlotPoint(LightData, LIGHTCOLOR);
+    } else if(PlotState == Joystick){
+      BSP_LCD_PlotPoint(JoystickX, LIGHTCOLOR);
     }
     BSP_LCD_PlotIncrement();
     OS_Signal(&LCDmutex);
@@ -369,6 +374,8 @@ void Task3(void){
         PlotState = Light;
       } else if(PlotState == Light){
         PlotState = Accelerometer;
+      } else if(PlotState == Accelerometer){
+        PlotState = Joystick;
       }
       ReDrawAxes = 1;                // redraw axes on next call of display task
       BSP_Buzzer_Set(512);           // beep until next call of this task
@@ -378,13 +385,15 @@ void Task3(void){
     if((current == 0) && (prev2 != 0)){
       // Button2 was pressed since last loop
       if(PlotState == Accelerometer){
-        PlotState = Light;
+        PlotState = Joystick;
       } else if(PlotState == Microphone){
         PlotState = Accelerometer;
       } else if(PlotState == Temperature){
         PlotState = Microphone;
       } else if(PlotState == Light){
         PlotState = Temperature;
+      } else if(PlotState == Joystick){
+        PlotState = Light;
       }
       ReDrawAxes = 1;                // redraw axes on next call of display task
       BSP_Buzzer_Set(512);           // beep until next call of this task
@@ -449,7 +458,8 @@ void Task4(void){int32_t voltData,tempData;
 void Task5(void){int32_t soundSum; int count=0;
   OS_Wait(&LCDmutex);
   BSP_LCD_DrawString(0,  0, "Temp=",  TOPTXTCOLOR);
-  BSP_LCD_DrawString(0,  1, "Step=",  TOPTXTCOLOR);
+  // BSP_LCD_DrawString(0,  1, "Step=",  TOPTXTCOLOR);
+  BSP_LCD_DrawString(0,  1, "JStick=",  TOPTXTCOLOR);
   BSP_LCD_DrawString(10, 0, "Light=", TOPTXTCOLOR);
   BSP_LCD_DrawString(10, 1, "Sound=", TOPTXTCOLOR);
   OS_Signal(&LCDmutex);
@@ -464,11 +474,10 @@ void Task5(void){int32_t soundSum; int count=0;
     SoundRMS = sqrt32(soundSum/SOUNDRMSLENGTH);
     OS_Wait(&LCDmutex);
     BSP_LCD_SetCursor(5,  0); BSP_LCD_OutUFix2_1(TemperatureData, TEMPCOLOR);
-    BSP_LCD_SetCursor(5,  1); BSP_LCD_OutUDec4(Steps,             MAGCOLOR);
+    BSP_LCD_SetCursor(5,  1); BSP_LCD_OutUDec4(JoystickX,             MAGCOLOR);
     BSP_LCD_SetCursor(16, 0); BSP_LCD_OutUDec4(LightData,         LIGHTCOLOR);
     BSP_LCD_SetCursor(16, 1); BSP_LCD_OutUDec4(SoundRMS,          SOUNDCOLOR);
     BSP_LCD_SetCursor(16,12); BSP_LCD_OutUDec4(Time/10,           TOPNUMCOLOR);
-    //add in one for joystick
 //debug code
     if(LostTask1Data){
       BSP_LCD_SetCursor(0, 12); BSP_LCD_OutUDec4(LostTask1Data, BSP_LCD_Color565(255, 0, 0));
@@ -692,7 +701,7 @@ int main(void){
   OS_AddPeriodicEventThread(&Task0, 1);
   // Task 1 should run every 100ms
   OS_AddPeriodicEventThread(&Task1, 100);
-   OS_AddPeriodicEventThread(&Task8, 800);
+  OS_AddPeriodicEventThread(&Task8, 800);
   // // Task 8 should run every second
   // OS_AddPeriodicEventThread(&Task8, 1000);
   // Task2, Task3, Task4, Task5, Task6, Task7 are main threads

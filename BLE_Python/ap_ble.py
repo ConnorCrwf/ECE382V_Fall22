@@ -129,14 +129,14 @@ def notification_handler_joystick_x(sender, data):
     global Joystick_X_g
     global Semaphore
     raw  = struct.unpack(">I", data)  # unpack 1 unsigned long
-    Joystick_X_g = raw[0]  #update global for the main loop
+    Joystick_X_g = raw[0]-512  #update global for the main loop
     Semaphore = 1
 
 def notification_handler_joystick_y(sender, data): 
     global Joystick_Y_g
     global Semaphore
     raw  = struct.unpack(">I", data)  # unpack 1 unsigned long
-    Joystick_Y_g = raw[0]  #update global for the main loop
+    Joystick_Y_g = raw[0]-512  #update global for the main loop
     Semaphore = 1
 
 
