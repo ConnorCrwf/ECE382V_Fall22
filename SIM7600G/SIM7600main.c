@@ -104,7 +104,7 @@
 // Task 5 Port 6.6 Output
 // Task 6 Port 2.3 Output
 #include <stdint.h>
-
+#include <string.h> 
 #include "../inc/CortexM.h"
 #include "../inc/Clock.h"
 #include "../inc/UART0.h"
@@ -121,44 +121,113 @@
 #include "os.h"
 #include "msp.h"
 
-#define VALVANO (uint8_t *)"+15129682240"
-#define PRANAV (uint8_t *)"+17138085920"
+// #define VALVANO (uint8_t *)"+15129682240"
+// #define PRANAV (uint8_t *)"+17138085920"
+#define USER (uint8_t *)"+18326640684"
+
+#define COMMAND_MESSAGE "Available Commads:\n\r \
+    C: temperature\n\r \
+    C: humidity\n\r \
+    C: light\n\r \
+    C: imu\n\r \
+    C: battery\n\r"
+
+
+// Parse buffer to decipher application commands
+// Available commands defined by COMMAND_MESSAGE
+int Message_Parser(char *buffer) {
+  char t[150] = "";
+  char response[300] = "";
+
+  if (strstr(buffer, "C:temperature") != NULL) {
+    sprintf(t, "Temperature: %d\n\r", 111);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:humidity") != NULL) {
+    sprintf(t, "Humidity: %d\n\r", 222);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:light") != NULL) {
+    sprintf(t, "Light: %d\n\r", 333);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:imu") != NULL) {
+    sprintf(t, "IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n\r", -11, -22, -33, 11, 22, 33, -11, -22, -33);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:battery") != NULL) {
+    sprintf(t, "Battery: %d\n\r", 444);
+    strcat(response, t);
+  }
+
+  UART0_OutString(response);
+
+  return 0;
+}
+
 
 // test main for phone
-int main(){int32_t n;
+int testmain(){int32_t n;
   Clock_Init48MHz();
   UART0_Initprintf();
   LaunchPad_Init();
   UART0_OutString("Embedded IoT SIM7600 project\n\r");
 
+  // Initializa SIM7600G module (restart required)
   SIM7600G_Init(SMS_SIM7600G); // more space on flash in SIM7600G
-//  UART0_OutString("Power down\n\r");
-//  SIM7600G_PowerDown();
-//  Clock_Delay1ms(40000); // give it time to shut down
-//  UART0_OutString("Restarting\n\r");
-//  SIM7600G_Restart(SMS_SIM7600G); // more space on flash in SIM7600G
+  // UART0_OutString("Power down\n\r");
+  // SIM7600G_PowerDown();
+  // Clock_Delay1ms(40000); // give it time to shut down
+  // UART0_OutString("Restarting\n\r");
+  // SIM7600G_Restart(SMS_SIM7600G); // more space on flash in SIM7600G
   UART0_OutString("***Initialization Complete***\n\r");
+
+  // Clear text messages in buffer
+  UART0_OutString("***Deleting texts***\n\r");
   n = SIM7600G_GetNumSMS();
-//  for(int i=0 ; i<n; i++){
-//    SIM7600G_DeleteSMS(i);
-//  }
-//  while(LaunchPad_Input()==0){};
-//  n = SIM7600G_GetNumSMS();
+  for(int i=0 ; i<n; i++){
+    SIM7600G_DeleteSMS(i);
+  }
+  UART0_OutString("***Deleted***\n\r");
 
-  //  UART0_OutString("***Sending text***\n\r");
-//  SIM7600G_SendSMS(PRANAV, "Hello TA SIM7600 from Embedded IoT!");
-//  SIM7600G_SendSMS(VALVANO, "Hello professor from Embedded IoT!");
-//  UART0_OutString("***Sent***\n[r");
- // while(LaunchPad_Input()==0){};
+  while(LaunchPad_Input()==0){};  // wait for user switch press
+  
+  // Send a text message
+  // UART0_OutString("***Sending text***\n\r");
+  // // SIM7600G_SendSMS(PRANAV, "Hello TA SIM7600 from Embedded IoT!");
+  // // SIM7600G_SendSMS(VALVANO, "Hello professor from Embedded IoT!");
+  // SIM7600G_SendSMS(USER, "Hello student from Embedded IoT!");
+  // UART0_OutString("***Sent***\n\r");
+  
+  while(LaunchPad_Input()==0){};  // wait for user input
 
+  // Read text and parse text messages
   char sms_read_buffer[255];
   uint32_t sms_readlen;
-  for(int i=0 ; i<n; i++){
-    SIM7600G_ReadSMS(i, sms_read_buffer,
-                                255, &sms_readlen);
-    char sender[100];
-    SIM7600G_GetSMSSender(i, sender, 100);
+  char sender[100];
+  int i = 0;
+  UART0_OutString(COMMAND_MESSAGE);
+  while(1) {
+    UART0_OutString("***Reading texts***\n\r");
+    n = SIM7600G_GetNumSMS();
+    for (int i = 0; i < n; i++) {
+      UART0_OutString("Message ");
+      UART0_OutChar(i + '1');
+
+      // Read message
+      SIM7600G_ReadSMS(i, sms_read_buffer, 255, &sms_readlen);
+      SIM7600G_GetSMSSender(i, sender, 100);
+      
+      // Parse message
+      Message_Parser(sms_read_buffer);
+      
+      // Delete message
+      SIM7600G_DeleteSMS(i);
+    }
+    UART0_OutString(COMMAND_MESSAGE);
+    while(LaunchPad_Input()==0){};  // wait for user input
   }
+
   while(1){};
 }
 
@@ -175,8 +244,60 @@ int32_t FixedTemperature; // 0.1C
 int32_t Ax,Ay,Az; // acceleration
 int32_t Rx,Ry,Rz; // gyro pitch, roll, yaw
 int32_t Mx,My,Mz; // magnetic field strength
+int32_t Battery;  // battery level
 // Select whether or not to check for errors
 #define ERRORCHECK 1
+
+
+// Parse buffer to decipher application commands
+// Available commands defined by COMMAND_MESSAGE
+int Message_Parser_RTOS(char *buffer) {
+  char t[150] = "";
+  char response[300] = "";
+
+  if (strstr(buffer, "C:temperature") != NULL) {
+    sprintf(t, "Temperature: %d\n\r", Temperature);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:humidity") != NULL) {
+    sprintf(t, "Humidity: %d\n\r", Humidity);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:light") != NULL) {
+    sprintf(t, "Light: %d\n\r", Light);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:imu") != NULL) {
+    sprintf(t, "IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n\r", Ax, Ay, Az, Rx, Ry, Rz, Mx, My, Mz);
+    strcat(response, t);
+  }
+  if (strstr(buffer, "C:battery") != NULL) {
+    sprintf(t, "Battery: %d\n\r", Battery);
+    strcat(response, t);
+
+  }
+
+  UART0_OutString(response);
+
+  return 0;
+}
+
+// Transmit text message with current measurements
+int Transmit_Measurements(void) {
+  static char response[300] = "";
+
+  // Update response with current measurement values
+  sprintf(response, "Temperature: %d\n\r \
+                     Humidity: %d\n\r \
+                     Light: %d\n\r \
+                     IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n\r \
+                     Battery: %d\n\r",
+                     Temperature, Humidity, Light, Ax, Ay, Az, Rx, Ry, Rz, Mx, My, Mz, Battery);
+
+  // Send text message
+  SIM7600G_SendSMS(USER, response);
+}
+
 
 //---------------- Task0 real time periodic event ----------------
 // Event thread run by OS in real time at 1000 Hz
@@ -186,6 +307,8 @@ int32_t Mx,My,Mz; // magnetic field strength
 // Inputs:  none
 // Outputs: none
 uint32_t SupplyCurrent; // mA measured with LTC6102
+uint32_t E;             // integral of SupplyCurrent
+uint32_t deltaT;        // 
 // Rsense = 0.05ohm
 // Rin = 100 ohm
 // Rout=4999 ohm (gain=50)
@@ -209,6 +332,7 @@ void Task0(void){uint32_t data;
   TimeMs = TimeMs + 1;
   data = ADC_In13();
   SupplyCurrent = (Gain*data)/16384;
+  E += SupplyCurrent;
 }
 /* ****************************************** */
 /*          End of Task0 Section              */
@@ -272,13 +396,22 @@ void Task1(void){
 
   while(1){
     P2_0 = P2_0^0x01; // viewed by a real logic analyzer to know Task1 started
-    OS_Sleep(100);
-    UART0_OutStringBlocking("\n\rText: ");
-    UART0_InStringBlocking(string,63); // user enters a string
-    LaunchPad_LED(1);
-    SIM7600G_SendSMS(VALVANO,(uint8_t *)string);
-    LaunchPad_LED(0);
+    OS_Sleep(10000);
 
+    SIM7600G()
+
+    Transmit_Measurements();
+
+    // UART0_OutStringBlocking("\n\rText: ");
+    // UART0_InStringBlocking(string,63); // user enters a string
+
+    // Parse text message
+    Message_Parser_RTOS(string);
+
+    LaunchPad_LED(1);
+    // SIM7600G_SendSMS(VALVANO,(uint8_t *)string);
+    SIM7600G_SendSMS(USER,(uint8_t *)string);
+    LaunchPad_LED(0);
   }
 }
 /* ****************************************** */
@@ -557,12 +690,12 @@ void Task6(void){
 // Remember that you must have exactly one main() function, so
 // to work on this step, you must rename all other main()
 // functions in this file.
-int realmain(void){ //RTOS main
+int main(void){ //RTOS main
   Clock_Init48MHz();
 
   OS_Init();
   Profile_Init();
-  UART0_Initprintf();
+  UART0_Initprintf(); // initialize UART and printf
   LaunchPad_Init();
   UART0_OutString("Embedded IoT SIM7600 project\n\r");
 
@@ -570,17 +703,16 @@ int realmain(void){ //RTOS main
   UART0_OutString("***Initialization Complete***\n\r");
   Task0_Init();       // real-time init
 
-
-  UART0_Initprintf(); // initialize UART and printf
-
   I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
   OS_InitSemaphore(&I2Cmutex, 1); // 1 means free
   OS_FIFO_Init();                 // initialize FIFO used to send data between Task1 and Task2
+  
   // Task 0 should run every 1ms
   OS_AddPeriodicEventThread(&Task0, 1);
 
   // Task1, Task2, Task3, Task4, Task5, Task6 are main threads
   OS_AddThreads(&Task1, &Task2, &Task3, &Task4, &Task5, &Task6);
+
   OS_Launch(48000); // 1ms switching, doesn't return, interrupts enabled in here
   return 0;         // this never executes
 }
