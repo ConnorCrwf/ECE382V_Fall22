@@ -126,11 +126,18 @@
 #define USER (uint8_t *)"+18326640684"
 
 #define COMMAND_MESSAGE "Available Commads:\n\r \
-    C: temperature\n\r \
-    C: humidity\n\r \
-    C: light\n\r \
-    C: imu\n\r \
-    C: battery\n\r"
+    C:temperature\n\r \
+    C:humidity\n\r \
+    C:light\n\r \
+    C:imu\n\r \
+    C:current\n\r"
+
+#define COMMAND_MESSAGE_RTOS "Available Commads:\n \
+    C:temperature\n \
+    C:humidity\n \
+    C:light\n \
+    C:imu\n \
+    C:current"
 
 
 // Parse buffer to decipher application commands
@@ -155,8 +162,8 @@ int Message_Parser(char *buffer) {
     sprintf(t, "IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n\r", -11, -22, -33, 11, 22, 33, -11, -22, -33);
     strcat(response, t);
   }
-  if (strstr(buffer, "C:battery") != NULL) {
-    sprintf(t, "Battery: %d\n\r", 444);
+  if (strstr(buffer, "C:current") != NULL) {
+    sprintf(t, "Battery Current: %d\n\r", 444);
     strcat(response, t);
   }
 
@@ -243,10 +250,11 @@ int32_t FixedTemperature; // 0.1C
 int32_t Ax,Ay,Az; // acceleration
 int32_t Rx,Ry,Rz; // gyro pitch, roll, yaw
 int32_t Mx,My,Mz; // magnetic field strength
-int32_t Battery;  // battery level
 // Select whether or not to check for errors
 #define ERRORCHECK 1
 
+uint32_t SupplyCurrent; // mA measured with LTC6102
+uint32_t E;             // integral of SupplyCurrent
 
 // Parse buffer to decipher application commands
 // Available commands defined by COMMAND_MESSAGE
@@ -257,29 +265,29 @@ char* Message_Parser_RTOS(char *buffer) {
 
   // Generate response message
   if (strstr(buffer, "C:temperature") != NULL) {
-    sprintf(t, "Temperature: %d\n\r", Temperature);
+    sprintf(t, "Temperature: %d\n", Temperature);
     strcat(response, t);
   }
   if (strstr(buffer, "C:humidity") != NULL) {
-    sprintf(t, "Humidity: %d\n\r", Humidity);
+    sprintf(t, "Humidity: %d\n", Humidity);
     strcat(response, t);
   }
   if (strstr(buffer, "C:light") != NULL) {
-    sprintf(t, "Light: %d\n\r", Light);
+    sprintf(t, "Light: %d\n", Light);
     strcat(response, t);
   }
   if (strstr(buffer, "C:imu") != NULL) {
-    sprintf(t, "IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n\r", Ax, Ay, Az, Rx, Ry, Rz, Mx, My, Mz);
+    sprintf(t, "IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n", Ax, Ay, Az, Rx, Ry, Rz, Mx, My, Mz);
     strcat(response, t);
   }
-  if (strstr(buffer, "C:battery") != NULL) {
-    sprintf(t, "Battery: %d\n\r", Battery);
+  if (strstr(buffer, "C:current") != NULL) {
+    sprintf(t, "Battery Current: %d", SupplyCurrent);
     strcat(response, t);
   }
 
   // No command recognized, generate help message
-  if (response == "") {
-    sprintf(response, "%s", COMMAND_MESSAGE);
+  if (strcmp(response, "") == 0) {
+    sprintf(response, "%s", COMMAND_MESSAGE_RTOS);
   }
 
   return response;
@@ -290,12 +298,8 @@ int Transmit_Measurements(void) {
   static char response[255] = "";
 
   // Update response with current measurement values
-  sprintf(response, "Temperature: %d\n\r \
-                     Humidity: %d\n\r \
-                     Light: %d\n\r \
-                     IMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\n\r \
-                     Battery: %d\n\r",
-                     Temperature, Humidity, Light, Ax, Ay, Az, Rx, Ry, Rz, Mx, My, Mz, Battery);
+  sprintf(response, "Temperature: %d\nHumidity: %d\nLight: %d\nIMU: (%d,%d,%d) (%d,%d,%d) (%d,%d,%d)\nBattery Current: %d",
+                     Temperature, Humidity, Light, Ax, Ay, Az, Rx, Ry, Rz, Mx, My, Mz, SupplyCurrent);
 
   // Send text message
   SIM7600G_SendSMS(USER, response);
@@ -309,9 +313,7 @@ int Transmit_Measurements(void) {
 // Task0 maintains time
 // Inputs:  none
 // Outputs: none
-uint32_t SupplyCurrent; // mA measured with LTC6102
-uint32_t E;             // integral of SupplyCurrent
-uint32_t deltaT;        // 
+
 // Rsense = 0.05ohm
 // Rin = 100 ohm
 // Rout=4999 ohm (gain=50)
@@ -405,11 +407,16 @@ void Task1(void){
 
   while(1){
     P2_0 = P2_0^0x01; // viewed by a real logic analyzer to know Task1 started
-    OS_Sleep(10000);
+
+    // Sleep to recharge for a 1100 mAh/day power budget
+    // OS_Sleep(200000 - 40000);  // calculated based on E = 3404867mAms and deltaT 56612ms
+                                  // - 40000 from the sleeping time after powering down
+    while(LaunchPad_Input()==0){};  // wait for user input, better approach for demo
+
     LaunchPad_LED(1);
+    E = 0; TimeMs = 0;  // reset values for deltaT calculation
 
     // Restart module and transmit measurements (Automatic Mode)
-    E = 0;
     SIM7600G_Restart(SMS_SIM7600G);
     Transmit_Measurements();
 
@@ -430,15 +437,20 @@ void Task1(void){
 
     // Power down to conserve energy
     SIM7600G_PowerDown();
+    OS_Sleep(40000);    // Sleep for 40s to properly shutdown
+
+    // Calculate deltaT from E????
+    UART0_OutUDec(E);
+    UART0_OutString("\n\r");
+    UART0_OutUDec(TimeMs);
+
+    LaunchPad_LED(0);
 
     // UART0_OutStringBlocking("\n\rText: ");
     // UART0_InStringBlocking(string,63); // user enters a string
 
-    
     // SIM7600G_SendSMS(VALVANO,(uint8_t *)string);
     // SIM7600G_SendSMS(USER,(uint8_t *)string);
-
-    LaunchPad_LED(0);
   }
 }
 /* ****************************************** */
