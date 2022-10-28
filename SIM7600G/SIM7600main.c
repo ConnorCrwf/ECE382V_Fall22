@@ -253,7 +253,7 @@ int32_t Battery;  // battery level
 char* Message_Parser_RTOS(char *buffer) {
   char t[150] = "";
   static char response[255];
-  response = "";
+  sprintf(response, "");
 
   // Generate response message
   if (strstr(buffer, "C:temperature") != NULL) {
@@ -409,7 +409,7 @@ void Task1(void){
     LaunchPad_LED(1);
 
     // Restart module and transmit measurements (Automatic Mode)
-    E = 0
+    E = 0;
     SIM7600G_Restart(SMS_SIM7600G);
     Transmit_Measurements();
 
