@@ -205,7 +205,6 @@ int testmain(){int32_t n;
   char sms_read_buffer[255];
   uint32_t sms_readlen;
   char sender[100];
-  int i = 0;
   UART0_OutString(COMMAND_MESSAGE);
   while(1) {
     UART0_OutString("***Reading texts***\n\r");
@@ -251,10 +250,12 @@ int32_t Battery;  // battery level
 
 // Parse buffer to decipher application commands
 // Available commands defined by COMMAND_MESSAGE
-int Message_Parser_RTOS(char *buffer) {
+char* Message_Parser_RTOS(char *buffer) {
   char t[150] = "";
-  char response[300] = "";
+  static char response[255];
+  response = "";
 
+  // Generate response message
   if (strstr(buffer, "C:temperature") != NULL) {
     sprintf(t, "Temperature: %d\n\r", Temperature);
     strcat(response, t);
@@ -274,17 +275,19 @@ int Message_Parser_RTOS(char *buffer) {
   if (strstr(buffer, "C:battery") != NULL) {
     sprintf(t, "Battery: %d\n\r", Battery);
     strcat(response, t);
-
   }
 
-  UART0_OutString(response);
+  // No command recognized, generate help message
+  if (response == "") {
+    sprintf(response, "%s", COMMAND_MESSAGE);
+  }
 
-  return 0;
+  return response;
 }
 
 // Transmit text message with current measurements
 int Transmit_Measurements(void) {
-  static char response[300] = "";
+  static char response[255] = "";
 
   // Update response with current measurement values
   sprintf(response, "Temperature: %d\n\r \
@@ -387,30 +390,54 @@ void UART0_OutStringBlocking(char *pt){
 // P2->OUT is 0x4000.4C03
 #define P2_0  (*((volatile uint8_t *)(0x42000000+32*0x4C03+4*0)))  /* Port 2.0 Output */
 void Task1(void){
-  char string[64];
+  // char string[64];
+  int32_t n;
+  char sms_read_buffer[255];
+  uint32_t sms_readlen;
+  char sender[100];
+  char *response;
+
   UART0_OutStringBlocking("\n\rRTOS version for SMS7600 4G\n\r");
   UART0_OutStringBlocking("Valvano Sept 12, 2022\n\r");
   SIM7600G_Init(SMS_SIM7600G); // more space on flash in SIM7600G
   UART0_OutStringBlocking("***Initialization Complete***\n\r");
-  UART0_OutStringBlocking("\n\rType message to send text\n\r");
+  // UART0_OutStringBlocking("\n\rType message to send text\n\r");
 
   while(1){
     P2_0 = P2_0^0x01; // viewed by a real logic analyzer to know Task1 started
     OS_Sleep(10000);
+    LaunchPad_LED(1);
 
-    SIM7600G()
-
+    // Restart module and transmit measurements (Automatic Mode)
+    E = 0
+    SIM7600G_Restart(SMS_SIM7600G);
     Transmit_Measurements();
+
+    // Read and parse incoming messages (Interactive Mode)
+    n = SIM7600G_GetNumSMS();
+    for (int i = 0; i < n; i++) {
+      // Read message
+      SIM7600G_ReadSMS(i, sms_read_buffer, 255, &sms_readlen);
+      SIM7600G_GetSMSSender(i, sender, 100);
+
+      // Parse and send response message
+      response = Message_Parser_RTOS(sms_read_buffer);
+      SIM7600G_SendSMS(USER, response);
+
+      // Delete message
+      SIM7600G_DeleteSMS(i);
+    }
+
+    // Power down to conserve energy
+    SIM7600G_PowerDown();
 
     // UART0_OutStringBlocking("\n\rText: ");
     // UART0_InStringBlocking(string,63); // user enters a string
 
-    // Parse text message
-    Message_Parser_RTOS(string);
-
-    LaunchPad_LED(1);
+    
     // SIM7600G_SendSMS(VALVANO,(uint8_t *)string);
-    SIM7600G_SendSMS(USER,(uint8_t *)string);
+    // SIM7600G_SendSMS(USER,(uint8_t *)string);
+
     LaunchPad_LED(0);
   }
 }
