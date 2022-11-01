@@ -123,7 +123,7 @@
 
 // #define VALVANO (uint8_t *)"+15129682240"
 // #define PRANAV (uint8_t *)"+17138085920"
-#define USER (uint8_t *)"+18326640684"
+ #define USER (uint8_t *)"+10701740699"     // Fake number
 
 #define COMMAND_MESSAGE "Available Commads:\n\r \
     C:temperature\n\r \
