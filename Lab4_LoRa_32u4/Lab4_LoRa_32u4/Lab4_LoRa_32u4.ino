@@ -94,7 +94,25 @@ void sendMessage(void) {
   Serial.print("Sent Message: ");
   debug((char*)&MessagePacket);
 
-  delay(100);   // small delay to see LED blink
+  // TODO @@@
+  uint8_t buf[5];
+  uint8_t len = sizeof(buf);
+  // Wait for reply
+  if (rf95.waitAvailableTimeout(500)) { 
+    // Should be a reply message for us now   
+    if (rf95.recv(buf, &len)) {
+      debug("Received Ack");
+    }
+    else {
+      debug("Failed Ack");
+    }
+  }
+  else {
+    debug("Missed Ack");
+  }
+
+  // TODO @@@
+  // delay(100);   // small delay to see LED blink
 }
 
 
@@ -111,6 +129,12 @@ void receiveMessage(void) {
       // Debug statements
       Serial.print("Received Message: ");
       debug((char*)&buf);
+
+      // TODO @@@
+      // Send acknowledgement
+      rf95.send('A', sizeof('A'));
+      rf95.waitPacketSent();
+      debug("Sent Ack");
     }
   }
   else {
@@ -212,6 +236,7 @@ void setup() {
   // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
   // you can set transmitter powers from 5 to 23 dBm:
   rf95.setTxPower(23, false);
+  digitalWrite(LED, LOW);   // Profiling
   digitalWrite(REDLED, LOW);
   digitalWrite(YELLOWLED, LOW);
   digitalWrite(GREENLED, LOW);
