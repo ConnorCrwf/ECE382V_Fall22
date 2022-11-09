@@ -94,11 +94,11 @@ void sendMessage(void) {
   Serial.print("Sent Message: ");
   debug((char*)&MessagePacket);
 
-  // TODO @@@
+  // Receive acknowledgement (for distance testing)
   uint8_t buf[5];
   uint8_t len = sizeof(buf);
   // Wait for reply
-  if (rf95.waitAvailableTimeout(500)) { 
+  if (rf95.waitAvailableTimeout(100)) { 
     // Should be a reply message for us now   
     if (rf95.recv(buf, &len)) {
       debug("Received Ack");
@@ -111,8 +111,7 @@ void sendMessage(void) {
     debug("Missed Ack");
   }
 
-  // TODO @@@
-  // delay(100);   // small delay to see LED blink
+  delay(100);   // small delay to see LED blink
 }
 
 
@@ -130,8 +129,7 @@ void receiveMessage(void) {
       Serial.print("Received Message: ");
       debug((char*)&buf);
 
-      // TODO @@@
-      // Send acknowledgement
+      // Send acknowledgement (for distance testing)
       rf95.send('A', sizeof('A'));
       rf95.waitPacketSent();
       debug("Sent Ack");
