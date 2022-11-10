@@ -153,21 +153,6 @@ def notification_handler_switch(sender, data): #Callback function for the subscr
     Switch_h = RawData[0]  #update global for the main loop
     Semaphore = 1
 
-
-
-#Asynchronous functions
-async def subscribe_light(client): #subscribes to a notification used for distance sensors
-    await client.start_notify(LIGHT_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_light)
-
-async def subscribe_joystickX(client): #subscribes to a notification used for distance sensors
-    await client.start_notify(JOYSTICK_X_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_x)
-
-async def subscribe_joystickY(client): #subscribes to a notification used for distance sensors
-    await client.start_notify(JOYSTICK_Y_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_y)
-
-async def subscribe_switch(client): #subscribes to a notification used for switches
-    await client.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
-
 #Connects to device using the address. Can be used in place of connect_name() if the address is already known
 async def connect_addr(device_addr):
     client = BleakClient(device_addr)
@@ -231,16 +216,16 @@ async def pygame_gui():
 
         # Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
         print("Trying to subscribe to Light data")
-        await subscribe_light(client_g)
+        await client_g.start_notify(LIGHT_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_light)
         print("Subscribed to Light data")
 
         print("Trying to subscribe to Joystick X data")
-        await subscribe_joystickX(client_g)
+        await client_g.start_notify(JOYSTICK_X_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_x)
         print("Subscribed to Joystick X data")
         # sleep(0.3)
 
         print("Trying to subscribe to Joystick Y data")
-        await subscribe_joystickY(client_g)
+        await client_g.start_notify(JOYSTICK_Y_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_y)
         print("Subscribed to Joystick Y data")
     
     else:
@@ -248,7 +233,7 @@ async def pygame_gui():
             client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_h)
             print("Trying to subscribe to Switch data")
-            await subscribe_switch(client_h)
+            await client_h.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
             print("Subscribed to Switch data")
 
     f = open("switch.txt", "a")
