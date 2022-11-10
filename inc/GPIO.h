@@ -150,7 +150,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 // NOTE: For MSP432+CC2650BP+RSLK, change 153 in GPIO.h to leave in #define DEFAULT 1       *
 // ******************************************************************************************
 
-//#define DEFAULT 1
+// #define DEFAULT 1
 
 
 #ifdef DEFAULT

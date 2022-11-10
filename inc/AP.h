@@ -363,6 +363,14 @@ int AP_StartAdvertisement(void);
 int AP_StartAdvertisementJacki(void);
 
 /**
+ * Start advertisement for RSLK
+ * @param none
+ * @return APOK if successful, APFAIL if notification not configured, or if SNP failure
+ * @brief start advertising
+ */
+int AP_StartAdvertisementRSLK(void);
+
+/**
  * Get status of connection
  * @param none
  * @return status 0xAABBCCDD<br>

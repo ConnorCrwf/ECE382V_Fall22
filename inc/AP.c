@@ -156,6 +156,8 @@ const uint8_t NPI_SetAdvertisementSAP[] = {
   0x00,           // 0dBm
   0x77};          // FCS (calculated by AP_SendMessageResponse)
 
+
+//Names
 uint8_t NPI_GATTSetDeviceName[] = {   
   SOF,22,0x00,    // length = 22
   0x35,0x8C,      // SNP Set GATT Parameter (0x8C)
@@ -171,6 +173,17 @@ uint8_t NPI_GATTSetDeviceNameJacki[] = {
   0x00,0x00,      // Device Name
   'J','a','c','k','i',' ','C','C','2','6','5','0',
   0x77};          // FCS (calculated by AP_SendMessageResponse)
+uint8_t NPI_GATTSetDeviceNameRSLK[] = {
+// students need to write this as part of Lab 19
+  SOF,7,0x00,    // length = 7
+  0x35,0x8C,      // SNP Set GATT Parameter (0x8C)
+  0x01,           // Generic Access Service
+  0x00,0x00,      // Device Name
+  'R','S','L','K',
+  0x77};          // FCS (calculated by AP_SendMessageResponse)
+
+//Advertisement Data
+
 uint8_t NPI_SetAdvertisementData[] = {   
   SOF,31,0x00,    // length = 31
   0x55,0x43,      // SNP Set Advertisement Data
@@ -195,7 +208,6 @@ uint8_t NPI_SetAdvertisementDataJacki[] = {
   0x00,           // Scan Response Data
   13,0x09,        // length, type=LOCAL_NAME_COMPLETE
   'J','a','c','k','i',' ','C','C','2','6','5','0',
-
 // connection interval range
   0x05,           // length of this data
   0x12,           // GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE
@@ -206,6 +218,25 @@ uint8_t NPI_SetAdvertisementDataJacki[] = {
   0x0A,           // GAP_ADTYPE_POWER_LEVEL
   0x00,           // 0dBm
   0x77};          // FCS (calculated by AP_SendMessageResponse)
+
+uint8_t NPI_SetAdvertisementDataRSLK[] = {
+// students need to write this as part of Lab 19
+  SOF,23,0x00,    // length = 24
+  0x55,0x43,      // SNP Set Advertisement Data
+  0x00,           // Scan Response Data
+  13,0x09,        // length, type=LOCAL_NAME_COMPLETE
+  'R','S','L','K',' ','C','C','2','6','5','0',
+// connection interval range
+  0x05,           // length of this data
+  0x12,           // GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE
+  0x50,0x00,      // DEFAULT_DESIRED_MIN_CONN_INTERVAL
+  0x20,0x03,      // DEFAULT_DESIRED_MAX_CONN_INTERVAL
+// Tx power level
+  0x02,           // length of this data
+  0x0A,           // GAP_ADTYPE_POWER_LEVEL
+  0x00,           // 0dBm
+  0x77};          // FCS (calculated by AP_SendMessageResponse)
+
 
 const uint8_t NPI_StartAdvertisement[] = {   
   SOF,14,0x00,    // length = 14
@@ -769,6 +800,25 @@ int AP_StartAdvertisementJacki(void){volatile int r=0;
 //  r =AP_SendMessageResponse((uint8_t*)NPI_SetAdvertisementSAP,RecvBuf,RECVSIZE);
   OutString("\n\rSetAdvertisement Data");
   r =AP_SendMessageResponse((uint8_t*)NPI_SetAdvertisementDataJacki,RecvBuf,RECVSIZE);
+  OutString("\n\rStartAdvertisement");
+  r =AP_SendMessageResponse((uint8_t*)NPI_StartAdvertisement,RecvBuf,RECVSIZE);
+  return r;
+}
+//*************AP_StartAdvertisementRSLK**************
+// Start advertisement for RSLK
+// Input:  none
+// Output: APOK if successful,
+//         APFAIL if notification not configured, or if SNP failure
+int AP_StartAdvertisementRSLK(void){volatile int r=0;
+// students need to write this as part of Lab 19
+  OutString("\n\rSet Device name");
+  r =AP_SendMessageResponse((uint8_t*)NPI_GATTSetDeviceNameRSLK,RecvBuf,RECVSIZE);
+  OutString("\n\rSetAdvertisement1");
+  r =AP_SendMessageResponse((uint8_t*)NPI_SetAdvertisement1,RecvBuf,RECVSIZE);
+//  OutString("\n\rSetAdvertisementSAP");
+//  r =AP_SendMessageResponse((uint8_t*)NPI_SetAdvertisementSAP,RecvBuf,RECVSIZE);
+  OutString("\n\rSetAdvertisement Data");
+  r =AP_SendMessageResponse((uint8_t*)NPI_SetAdvertisementDataRSLK,RecvBuf,RECVSIZE);
   OutString("\n\rStartAdvertisement");
   r =AP_SendMessageResponse((uint8_t*)NPI_StartAdvertisement,RecvBuf,RECVSIZE);
   return r;

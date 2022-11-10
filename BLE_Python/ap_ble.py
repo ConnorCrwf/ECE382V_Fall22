@@ -58,8 +58,9 @@ import pygame
 #device name to connect to
 # DEVICE_NAME = "Shape the World"
 FITNESS_NAME = "Fitness Device"
-ROBOT_NAME = "RSLK Server"
-two_devices = False 
+ROBOT_NAME = "Jacki RSLK 1"
+test_button = True
+test_fitness = True
 
 #If the device address is known then you can also connect directly via the address instead of using the name
 #DEVICE_ADDR = "A0:E6:F8:C4:92:82"
@@ -206,14 +207,23 @@ async def pygame_gui():
     global current_keys_g #holds the state of the arrow keys to write to the rslk
     current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
-
-    if two_devices == False:
-        #If client has not been connected then connect via device name
-        while client_g == None or client_g.is_connected == False:
+    #If client has not been connected then connect via device name
+    while client_g == None or client_g.is_connected == False:
+        if test_fitness and test_button:
             client_g = await connect_name(FITNESS_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_g)
-            #print("Failed to connect, trying again")
+            client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+            print(client_h)
+        elif test_fitness: 
+            client_g = await connect_name(FITNESS_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+            print(client_g)
+        elif test_button: 
+            client_g = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+            print(client_g)
+        else: pass
+        #print("Failed to connect, trying again")
 
+    if test_fitness:
         # Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
         print("Trying to subscribe to Light data")
         await client_g.start_notify(LIGHT_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_light)
@@ -227,14 +237,16 @@ async def pygame_gui():
         print("Trying to subscribe to Joystick Y data")
         await client_g.start_notify(JOYSTICK_Y_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_y)
         print("Subscribed to Joystick Y data")
-    
-    else:
-        while client_h == None or client_h.is_connected == False:
-            client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
-            print(client_h)
-            print("Trying to subscribe to Switch data")
-            await client_h.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
-            print("Subscribed to Switch data")
+
+    if test_fitness and test_button:
+        print("Trying to subscribe to Switch data")
+        await client_h.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
+        print("Subscribed to Switch data")
+
+    elif test_button:
+        print("Trying to subscribe to Switch data")
+        await client_g.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
+        print("Subscribed to Switch data")
 
     f = open("switch.txt", "a")
 
@@ -305,7 +317,7 @@ async def pygame_gui():
             # Display Joystick Value and Draw it 
             print ("Light =", Light_g)
             print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
-            # print ("Switch =", Switch_h)
+            print ("Switch =", Switch_h)
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important

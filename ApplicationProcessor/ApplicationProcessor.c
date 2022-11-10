@@ -54,7 +54,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "msp.h"
 
 //--------------------------------------------------
-// 1. Initialize GATT (add services, characteristics, CCCD’s, etc.). See Section 9.5.
+// 1. Initialize GATT (add services, characteristics, CCCDï¿½s, etc.). See Section 9.5.
 // 2. Initialize GAP (advertisement data, connection parameters, etc.). See Section 9.3.
 // 3. Advertise and optionally wait for a connection. See Section 9.4.
 // 4. Respond to GATT requests and send notifications / indications as desired. See Section 9.6
@@ -130,6 +130,8 @@ int main(void){ volatile int r;
   //------------------------
   AP_RegisterService();
   AP_StartAdvertisement();
+//  Name change doesn't work here
+//  AP_StartAdvertisementRSLK();
   AP_GetStatus(); // optional
   while(1){
     time++;

@@ -87,7 +87,6 @@ int32_t JoystickX;
 int32_t JoystickY;
 
 // New variables
-uint16_t Switch1;       // 16-bit notify data from Button 1
 uint16_t LED;           // 16-bit write-only data to LED
 
 // semaphores
@@ -206,8 +205,6 @@ void Task1_Init(void){
 void Task1(void){uint32_t squared;
   TExaS_Task1();     // records system time in array, toggles virtual logic analyzer
   Profile_Toggle1(); // viewed by a real logic analyzer to know Task1 started
-
-  Switch1 = LaunchPad_Input()&0x01;   // Button 1 the & masks everything but the 1st bit, shouldn't it be 0x02 then?
 
   BSP_Accelerometer_Input(&AccX, &AccY, &AccZ);
   squared = AccX*AccX + AccY*AccY + AccZ*AccZ;
@@ -618,10 +615,6 @@ void Bluetooth_ReadJoystickY(void){
   OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(2));
 }
 
- void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
-   OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(3));
- }
-
 extern uint16_t edXNum; // actual variable within TExaS
 void Bluetooth_Init(void){volatile int r;
   EnableInterrupts();
@@ -646,8 +639,6 @@ void Bluetooth_Init(void){volatile int r;
   Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
   Lab6_AddNotifyCharacteristic(0xFFFB,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
   Lab6_AddNotifyCharacteristic(0xFFFC,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
-//  Lab6_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
-
 
   Lab6_RegisterService();
   Lab6_StartAdvertisement("Fitness Device");
