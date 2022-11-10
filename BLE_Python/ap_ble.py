@@ -56,7 +56,10 @@ import struct
 import pygame
 
 #device name to connect to
-DEVICE_NAME = "Shape the World"
+# DEVICE_NAME = "Shape the World"
+JOYSTICK_NAME = "Joystick Server"
+ROBOT_NAME = "Robot Server"
+two_devices = False 
 
 #If the device address is known then you can also connect directly via the address instead of using the name
 #DEVICE_ADDR = "A0:E6:F8:C4:92:82"
@@ -95,6 +98,7 @@ FRAMERATE = 1/30 #set frame rate for screen - 30 fps
 
 #globals to share information between async tasks
 client_g = None #store client connection
+client_h = None
 current_keys_g = 0 #stores the state of the key presses
 Dist_g = 0 
 Light_g = 0 
@@ -105,6 +109,9 @@ Word_g = 0
 Buffer = []
 Time = 0
 Semaphore = 0
+
+# Robot
+Switch_h = 0
 
 
 #Helper functions
@@ -139,6 +146,13 @@ def notification_handler_joystick_y(sender, data):
     Joystick_Y_g = raw[0]-512  #update global for the main loop
     Semaphore = 1
 
+def notification_handler_switch(sender, data): #Callback function for the subscribed notification. Unpacks the light data and updates the global light variable
+    global Switch_h
+    global Semaphore
+    RawData  = struct.unpack(">H", data)  # unpack 1 unsigned long
+    Switch_h = RawData[0]  #update global for the main loop
+    Semaphore = 1
+
 
 
 #Asynchronous functions
@@ -150,6 +164,9 @@ async def subscribe_joystickX(client): #subscribes to a notification used for di
 
 async def subscribe_joystickY(client): #subscribes to a notification used for distance sensors
     await client.start_notify(JOYSTICK_Y_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_y)
+
+async def subscribe_switch(client): #subscribes to a notification used for switches
+    await client.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
 
 #Connects to device using the address. Can be used in place of connect_name() if the address is already known
 async def connect_addr(device_addr):
@@ -165,12 +182,12 @@ async def connect_name(device_name):
 
     for d in devices:
         if d.name == device_name:
-            print("Found Shape the World")
+            print("Found "+d.name)
 
-            # connect to Shape the World
+            # connect to a device
             client = BleakClient(d.address)
             await client.connect()
-            print("Connected to Shape the World")
+            print("Connected to "+d.name)
 
             return client
 
@@ -197,33 +214,43 @@ async def read_Time(client):
 #Main fuction that runs in a loop, starts the gui and updates the characteristics
 async def pygame_gui():
     global client_g #client conneciton
+    global client_h
     global Buffer
     global Time
     global Semaphore
     global current_keys_g #holds the state of the arrow keys to write to the rslk
     current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
-    #If client has not been connected then connect via device name
-    while client_g == None or client_g.is_connected == False:
-        client_g = await connect_name(DEVICE_NAME) #can be changed to connect_addr(DEVICE_ADDR)
-        print(client_g)
-        #print("Failed to connect, trying again")
+    while client_h == None or client_h.is_connected == False:
+        client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+        print(client_h)
 
-    # Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
-    print("Trying to subscribe to Light data")
-    await subscribe_light(client_g)
-    print("Subscribed to Light data")
+    print("Trying to subscribe to Switch data")
+    await subscribe_switch(client_h)
+    print("Subscribed to Switch data")
+    '''
+    if two_devices:
+        #If client has not been connected then connect via device name
+        while client_g == None or client_g.is_connected == False:
+            client_g = await connect_name(JOYSTICK_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+            print(client_g)
+            #print("Failed to connect, trying again")
 
-    
-    print("Trying to subscribe to Joystick X data")
-    await subscribe_joystickX(client_g)
-    print("Subscribed to Joystick X data")
-    # sleep(0.3)
+        # Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
+        print("Trying to subscribe to Light data")
+        await subscribe_light(client_g)
+        print("Subscribed to Light data")
 
-    print("Trying to subscribe to Joystick Y data")
-    await subscribe_joystickY(client_g)
-    print("Subscribed to Joystick Y data")
-    
+        
+        print("Trying to subscribe to Joystick X data")
+        await subscribe_joystickX(client_g)
+        print("Subscribed to Joystick X data")
+        # sleep(0.3)
+
+        print("Trying to subscribe to Joystick Y data")
+        await subscribe_joystickY(client_g)
+        print("Subscribed to Joystick Y data")
+    '''
     # print("Trying to subscribe to Joystick Y data")
     # await subscribe(client_g, JOYSTICK_Y_UUID_N)
     # print("Subscribed to Joystick Y data")
@@ -241,7 +268,6 @@ async def pygame_gui():
     t = 0
 
     while True: #Main loop
-
         #First handle key inputs
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
@@ -298,8 +324,7 @@ async def pygame_gui():
             # Display Joystick Value and Draw it 
             print ("Light =", Light_g)
             print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
-            
-
+            print ("Switch =", Switch_h)
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important
