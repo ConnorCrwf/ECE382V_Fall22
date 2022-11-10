@@ -61,7 +61,6 @@
 //*********************************************************
 uint32_t sqrt32(uint32_t s);
 #define THREADFREQ 1000   // frequency in Hz of round robin scheduler
-//#define JOYSTICK
 
 //---------------- Global variables shared between tasks ----------------
 uint32_t Time;              // elasped time in 100 ms units
@@ -620,7 +619,7 @@ void Bluetooth_ReadJoystickY(void){
 }
 
  void Bluetooth_Switch1(void){ // called on SNP CCCD Updated Indication
-   OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(0));
+   OutValue("\n\rSwitch 1 CCCD=",AP_GetNotifyCCCD(3));
  }
 
 extern uint16_t edXNum; // actual variable within TExaS
@@ -644,19 +643,14 @@ void Bluetooth_Init(void){volatile int r;
 
   // Notify Characteristics (Values subscribed to by Client based on publish rate of each task)
   // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
-//  Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
-//  Lab6_AddNotifyCharacteristic(0xFFFB,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
-//  Lab6_AddNotifyCharacteristic(0xFFFC,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
-  // Switch1 = 0; probably don't need
-  Lab6_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
+  Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
+  Lab6_AddNotifyCharacteristic(0xFFFB,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
+  Lab6_AddNotifyCharacteristic(0xFFFC,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
+//  Lab6_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
 
 
   Lab6_RegisterService();
-#ifdef JOYSTICK
-  Lab6_StartAdvertisement("Joystick Server");
-#else
-  Lab6_StartAdvertisement("Robot Server");
-#endif
+  Lab6_StartAdvertisement("Fitness Device");
   Lab6_GetStatus();
   DisableInterrupts(); // optional
 }
@@ -704,7 +698,7 @@ int main(void){
   // Task 1 should run every 100ms
   OS_AddPeriodicEventThread(&Task1, 100);
   // // Task 8 should run every second
-   OS_AddPeriodicEventThread(&Task8, 1000);
+  OS_AddPeriodicEventThread(&Task8, 1000);
   // Task2, Task3, Task4, Task5, Task6, Task7 are main threads
   OS_AddThreads(&Task2, &Task3, &Task4, &Task5, &Task6, &Task7);
   // when grading change 1000 to 4-digit number from edX

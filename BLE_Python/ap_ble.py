@@ -57,8 +57,8 @@ import pygame
 
 #device name to connect to
 # DEVICE_NAME = "Shape the World"
-JOYSTICK_NAME = "Joystick Server"
-ROBOT_NAME = "Robot Server"
+FITNESS_NAME = "Fitness Device"
+ROBOT_NAME = "RSLK Server"
 two_devices = False 
 
 #If the device address is known then you can also connect directly via the address instead of using the name
@@ -221,18 +221,11 @@ async def pygame_gui():
     global current_keys_g #holds the state of the arrow keys to write to the rslk
     current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
-    while client_h == None or client_h.is_connected == False:
-        client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
-        print(client_h)
 
-    print("Trying to subscribe to Switch data")
-    await subscribe_switch(client_h)
-    print("Subscribed to Switch data")
-    '''
-    if two_devices:
+    if two_devices == False:
         #If client has not been connected then connect via device name
         while client_g == None or client_g.is_connected == False:
-            client_g = await connect_name(JOYSTICK_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+            client_g = await connect_name(FITNESS_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_g)
             #print("Failed to connect, trying again")
 
@@ -241,7 +234,6 @@ async def pygame_gui():
         await subscribe_light(client_g)
         print("Subscribed to Light data")
 
-        
         print("Trying to subscribe to Joystick X data")
         await subscribe_joystickX(client_g)
         print("Subscribed to Joystick X data")
@@ -250,10 +242,14 @@ async def pygame_gui():
         print("Trying to subscribe to Joystick Y data")
         await subscribe_joystickY(client_g)
         print("Subscribed to Joystick Y data")
-    '''
-    # print("Trying to subscribe to Joystick Y data")
-    # await subscribe(client_g, JOYSTICK_Y_UUID_N)
-    # print("Subscribed to Joystick Y data")
+    
+    else:
+        while client_h == None or client_h.is_connected == False:
+            client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
+            print(client_h)
+            print("Trying to subscribe to Switch data")
+            await subscribe_switch(client_h)
+            print("Subscribed to Switch data")
 
     f = open("switch.txt", "a")
 
@@ -324,7 +320,7 @@ async def pygame_gui():
             # Display Joystick Value and Draw it 
             print ("Light =", Light_g)
             print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
-            print ("Switch =", Switch_h)
+            # print ("Switch =", Switch_h)
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important
