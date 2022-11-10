@@ -76,6 +76,7 @@ TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData 
 
 # Characteristics (Values written by Client)
 LED_UUID_W = "0000fff6" # read-only characteristic for the WordData data (LED). 
+DriveY_UUID_W = "0000fffe"
 # DISTANCE_UUID_N = "0000ff7" # notify characteristic Distance that can be subscribed to to get the data.
 
 # Read Notify Characteristics
@@ -107,6 +108,7 @@ Joystick_X_g = 0
 Joystick_Y_g = 0
 Halfword_g = 0
 Word_g = 0
+LED_g = 0
 Buffer = []
 Time = 0
 Semaphore = 0
@@ -274,9 +276,11 @@ async def pygame_gui():
             elif event.type == pygame.KEYDOWN and event.key in KEYS_MAP:
                 current_keys_g = KEYS_MAP[event.key] 
 
+        global LED_g
+        global Joystick_Y_g
         # If the new values are different then we write to the characteristic
         if current_keys_g != current_keys_g_old:
-
+            
             # Reading
             if current_keys_g == 11: # s
                 asyncio.create_task(read_Time(client_g))
@@ -285,13 +289,27 @@ async def pygame_gui():
             # elif current_keys_g == 13: # u
             #     asyncio.create_task(read_Joystick(client_g))
             
-            # Writing
+            # Writing Again
             elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
-                Word_g = current_keys_g
-                print ("LED = ", Word_g)
-                value = struct.pack(">h", Word_g) # pack into binary, 1 unsigned long (32bit)
+                LED_g = current_keys_g
+                print ("LED = ", LED_g)
+                value = struct.pack(">h", LED_g) # pack into binary, 1 unsigned long (32bit)
                 #print (value)
-                asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
+                if test_button and test_fitness:
+                    asyncio.create_task(client_h.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
+                else:
+                    asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
+
+            elif current_keys_g == 13: #u
+                #Drive Command
+                raw = -1*Joystick_Y_g
+                # raw = 5
+                value = struct.pack(">i", raw)
+                if test_button and test_fitness:
+                    asyncio.create_task(client_h.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
+                else: 
+                    asyncio.create_task(client_g.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
+
 
         current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
@@ -318,6 +336,7 @@ async def pygame_gui():
             print ("Light =", Light_g)
             print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
             print ("Switch =", Switch_h)
+            print ("LED value written is =", LED_g)
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important
