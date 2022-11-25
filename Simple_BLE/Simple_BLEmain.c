@@ -73,6 +73,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 #define ROBOT 1
 
 uint16_t Switch1;       // 16-bit notify data from Button 1
+int32_t DriveXCmd;
 int32_t DriveYCmd;
 uint16_t LED; 
 uint32_t time=0;
@@ -154,9 +155,28 @@ void OutValue(char *label,uint32_t value){
   UART0_OutUHex(value);
 }
 
+void Bluetooth_DriveXCmd(void){
+   UART0_OutString("\n\r");
+   UART0_OutString("\n\rDriveX Cmd is ");
+   UART0_OutSDec(DriveXCmd);
+   UART0_OutString("\n\r");
+  // OutValue("\n\rDriveYCmd Data=",DriveYCmd);
+}
+
 void Bluetooth_DriveYCmd(void){
    UART0_OutString("\n\r");
-   UART0_OutString("\n\rDrive Cmd is ");
+   UART0_OutString("\n\rDriveY Cmd is ");
+   UART0_OutSDec(DriveYCmd);
+   UART0_OutString("\n\r");
+  // OutValue("\n\rDriveYCmd Data=",DriveYCmd);
+}
+
+void Bluetooth_DriveCmd(void){
+   UART0_OutString("\n\r");
+   UART0_OutString("\n\rDriveX Cmd is ");
+   UART0_OutSDec(DriveXCmd);
+   UART0_OutString(", ");
+   UART0_OutString("\n\rDriveY Cmd is ");
    UART0_OutSDec(DriveYCmd);
    UART0_OutString("\n\r");
   // OutValue("\n\rDriveYCmd Data=",DriveYCmd);
@@ -181,11 +201,12 @@ void BLE_Init(uint8_t num){volatile int r;
   AP_AddService(0xFFF0);  //TODO I guess it's ok to have both devices under the same service?
 
   //Characteristics (Values written by Client)
-  AP_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
-  AP_AddCharacteristic(0xFFFE,4,&DriveYCmd,0x02,0x08,"JoystickX",0,&Bluetooth_DriveYCmd); 
+//  AP_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
+  AP_AddCharacteristic(0xFFFE,4,&DriveXCmd,0x02,0x08,"JoystickX",0,&Bluetooth_DriveCmd);
+  AP_AddCharacteristic(0xFFFF,4,&DriveYCmd,0x02,0x08,"JoystickY",0,&Bluetooth_DriveCmd);
 
   //Notify Characteristics (Publishing)
-  AP_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
+//  AP_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
   AP_RegisterService();
   AP_StartAdvertisementJacki19(num);
   AP_GetStatus(); // optional

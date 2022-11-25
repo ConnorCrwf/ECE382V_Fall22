@@ -607,12 +607,14 @@ void Bluetooth_ReadLight(void){ // called on a SNP Characteristic Read Indicatio
 }
 
 void Bluetooth_ReadJoystickX(void){ // called on SNP CCCD Updated Indication for characteristic Joystick
-  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(1));  //when this is called the CCCD value should be zero but it should change
+  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(0));  //if not using extra features
+//  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(1));  //when this is called the CCCD value should be zero but it should change
   //  after this to a non-zero number temporarily, allowin AP_SendNotification(1) to send latest data since it only does so based on CCCD value being nonzero
 }
 
 void Bluetooth_ReadJoystickY(void){ 
-  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(2));
+  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(1));  //if not using extra features
+//  OutValue("\n\rCCCD Joystick CCCD is",AP_GetNotifyCCCD(2));
 }
 
 extern uint16_t edXNum; // actual variable within TExaS
@@ -625,20 +627,23 @@ void Bluetooth_Init(void){volatile int r;
   //this is a server, servers have services. python script is a client. they're connected. Can't connect two servers together
   Lab6_AddService(0xFFF0); 
   //Characteristics (Values read by Client)
+  /*
   Lab6_AddCharacteristic(0xFFF1,2,&PlotState,0x03,0x0A,"PlotState",&Bluetooth_ReadPlotState,&Bluetooth_WritePlotState);
   Lab6_AddCharacteristic(0xFFF2,4,&Time,0x01,0x02,"Time",&Bluetooth_ReadTime,0);
   Lab6_AddCharacteristic(0xFFF3,4,&SoundRMS,0x01,0x02,"Sound",&Bluetooth_ReadSound,0);
   Lab6_AddCharacteristic(0xFFF4,2,&TemperatureHalfwordData,0x01,0x02,"Temperature",&Bluetooth_ReadTemperature,0);
   Lab6_AddCharacteristic(0xFFF5,2,&edXNum,0x02,0x08,"edXNum",0,&TExaS_Grade);
+  */
   
   //Characteristics (Values written by Client)
-  Lab6_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED); 
+//  Lab6_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
 
   // Notify Characteristics (Values subscribed to by Client based on publish rate of each task)
-  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
-  Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
+//  Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
   Lab6_AddNotifyCharacteristic(0xFFFB,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
   Lab6_AddNotifyCharacteristic(0xFFFC,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);
+  // Lab6_AddNotifyCharacteristic(0xFFF7,2,&Steps,"Number of Steps",&Bluetooth_Steps);
+
 
   Lab6_RegisterService();
   Lab6_StartAdvertisement("Fitness Device");

@@ -59,8 +59,10 @@ import pygame
 # DEVICE_NAME = "Shape the World"
 FITNESS_NAME = "Fitness Device"
 ROBOT_NAME = "Jacki RSLK 1"
-test_button = True
-test_fitness = True
+BTdevice_1 = True   # was using this back when we were testing with just one device connected
+BTdevice_2 = True   # both can be true in this case; has to do with whether we're using client_h or client_g
+extra_features = False   # flag to turn on/off subscribers/publishers for switch, LEDs, light sensors, Time, & Temperature
+# this is done to issues with bluetooth when dealing with multiply read/write/notify characteritics at the same time
 
 #If the device address is known then you can also connect directly via the address instead of using the name
 #DEVICE_ADDR = "A0:E6:F8:C4:92:82"
@@ -76,7 +78,8 @@ TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData 
 
 # Characteristics (Values written by Client)
 LED_UUID_W = "0000fff6" # read-only characteristic for the WordData data (LED). 
-DriveY_UUID_W = "0000fffe"
+DriveX_UUID_W = "0000fffe"
+DriveY_UUID_W = "0000ffff"
 # DISTANCE_UUID_N = "0000ff7" # notify characteristic Distance that can be subscribed to to get the data.
 
 # Read Notify Characteristics
@@ -211,25 +214,25 @@ async def pygame_gui():
 
     #If client has not been connected then connect via device name
     while client_g == None or client_g.is_connected == False:
-        if test_fitness and test_button:
+        if BTdevice_2 and BTdevice_1:
             client_g = await connect_name(FITNESS_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_g)
             client_h = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_h)
-        elif test_fitness: 
+        elif BTdevice_2: 
             client_g = await connect_name(FITNESS_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_g)
-        elif test_button: 
+        elif BTdevice_1: 
             client_g = await connect_name(ROBOT_NAME) #can be changed to connect_addr(DEVICE_ADDR)
             print(client_g)
         else: pass
         #print("Failed to connect, trying again")
 
-    if test_fitness:
+    if BTdevice_2:
         # Subscribe to the notification characteristic. Can be commented out if you want to use the read only distance characteristic
-        print("Trying to subscribe to Light data")
-        await client_g.start_notify(LIGHT_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_light)
-        print("Subscribed to Light data")
+        # print("Trying to subscribe to Light data")
+        # await client_g.start_notify(LIGHT_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_light)
+        # print("Subscribed to Light data")
 
         print("Trying to subscribe to Joystick X data")
         await client_g.start_notify(JOYSTICK_X_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_x)
@@ -240,12 +243,13 @@ async def pygame_gui():
         await client_g.start_notify(JOYSTICK_Y_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_joystick_y)
         print("Subscribed to Joystick Y data")
 
-    if test_fitness and test_button:
-        print("Trying to subscribe to Switch data")
-        await client_h.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
-        print("Subscribed to Switch data")
+    if BTdevice_2 and BTdevice_1:
+        if extra_features:
+            print("Trying to subscribe to Switch data")
+            await client_h.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
+            print("Subscribed to Switch data")
 
-    elif test_button:
+    elif BTdevice_1:
         print("Trying to subscribe to Switch data")
         await client_g.start_notify(SWITCH1_UUID_N + VENDOR_SPECIFIC_UUID, notification_handler_switch)
         print("Subscribed to Switch data")
@@ -282,39 +286,43 @@ async def pygame_gui():
         global Joystick_Y_g
         # If the new values are different then we write to the characteristic
         if current_keys_g != current_keys_g_old:
-            
-            # Reading
-            if current_keys_g == 11: # s
-                asyncio.create_task(read_Time(client_g))
-            elif current_keys_g == 12: # t
-                asyncio.create_task(read_Temperature(client_g))
-            # elif current_keys_g == 13: # u
-            #     asyncio.create_task(read_Joystick(client_g))
-            
-            # Writing Again
-            elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
-                LED_g = current_keys_g
-                print ("LED = ", LED_g)
-                value = struct.pack(">h", LED_g) # pack into binary, 1 unsigned long (32bit)
-                #print (value)
-                if test_button and test_fitness:
-                    asyncio.create_task(client_h.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
-                else:
-                    asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
 
-            # elif current_keys_g == 13: #u
+            if extra_features: 
+                # Reading
+                if current_keys_g == 11: # s
+                    asyncio.create_task(read_Time(client_g))
+                elif current_keys_g == 12: # t
+                    asyncio.create_task(read_Temperature(client_g))
+                # elif current_keys_g == 13: # u
+                #     asyncio.create_task(read_Joystick(client_g))
+                
+                # Writing Again
+                elif ((current_keys_g >= 0) and (current_keys_g < 8)): #0-7
+                    LED_g = current_keys_g
+                    print ("LED = ", LED_g)
+                    value = struct.pack(">h", LED_g) # pack into binary, 1 unsigned long (32bit)
+                    #print (value)
+                    if BTdevice_1 and BTdevice_2:
+                        asyncio.create_task(client_h.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
+                    else:
+                        asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
+
+                # elif current_keys_g == 13: #u
                 
 
         current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
         # Send Drive Command
-        if Time_Loop >= 50:  # tested and executes about every half-sec
+        if Time_Loop >= 10:  # tested and executes about every half-sec
             #Drive Command
-            raw = Joystick_Y_g
+            rawX = Joystick_X_g
+            rawY = Joystick_Y_g
             # raw = 5
-            value = struct.pack(">i", raw)
-            if test_button and test_fitness:
-                asyncio.create_task(client_h.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
+            x_value = struct.pack(">i", rawX)
+            y_value = struct.pack(">i", rawY)
+            if BTdevice_1 and BTdevice_2:
+                asyncio.create_task(client_h.write_gatt_char(DriveX_UUID_W + VENDOR_SPECIFIC_UUID,x_value))
+                asyncio.create_task(client_h.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,y_value))   
             else: 
                 asyncio.create_task(client_g.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
             Time_Loop = 0
@@ -340,10 +348,11 @@ async def pygame_gui():
                 pygame.draw.line(screen,pygame.Color(255,255,0),(t,y),(t,y))
             '''
             # Display Joystick Value and Draw it 
-            print ("Light =", Light_g)
+            if extra_features:
+                print ("Light =", Light_g)
+                print ("Switch =", Switch_h)
+                print ("LED value written is =", LED_g)
             print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
-            print ("Switch =", Switch_h)
-            print ("LED value written is =", LED_g)
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important
