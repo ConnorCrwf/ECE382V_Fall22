@@ -374,7 +374,7 @@ void AP_EchoSendMessage(uint8_t *sendMsg){ int i;uint32_t fcs;
   uint32_t size=AP_GetSize(sendMsg);
   fcs = 0;
   for(i=1;i<size+5;i++)fcs = fcs^sendMsg[i];
-  OutString("\n\rLP->SNP ");
+  OutString("\n\rLP->SNP ");   //removed so terinal isn't flooted with useless messages
   for(i=0; i<=(4+size); i++){ 
     OutUHex2(sendMsg[i]); OutChar(',');
   }
@@ -386,7 +386,7 @@ void AP_EchoSendMessage(uint8_t *sendMsg){ int i;uint32_t fcs;
 // Outputs: none
 void AP_EchoReceived(int response){ uint32_t size; int i;
   if(response==APOK){
-    OutString("\n\rSNP->LP ");
+    OutString("\n\rSNP->LP ");  //removed so terinal isn't flooted with useless messages
     size = AP_GetSize(RecvBuf);
     for(i=0; i<=(4+size); i++){ 
       OutUHex2(RecvBuf[i]); OutChar(',');
@@ -752,7 +752,7 @@ int AP_SendNotification(uint32_t i){ uint16_t handle; uint32_t j;uint8_t thedata
     handle = NotifyCharacteristicList[i].theHandle;
     if(handle == 0) return APFAIL; // not open   
     NPI_SendNotificationIndication[1] = 6+NotifyCharacteristicList[i].size;      // 1 to 8 bytes 
-    OutString("\n\rSend data=");
+    OutString("\n\rSend data=");   //removed so terinal isn't flooted with useless messages
     s = NotifyCharacteristicList[i].size;
     for(j=0; j<s; j++){
       thedata = NotifyCharacteristicList[i].pt[s-j-1]; // fetch data from user little endian to SNP big endian

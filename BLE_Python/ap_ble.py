@@ -260,10 +260,12 @@ async def pygame_gui():
         Buffer.append(0)    	
     #this array will allow scrolling erase
     Time = 0 
+    Time_Loop = 0
     t = 0
 
     while True: #Main loop
         #First handle key inputs
+        Time_Loop+=1
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 print("Closing switch.txt file")
@@ -300,18 +302,23 @@ async def pygame_gui():
                 else:
                     asyncio.create_task(client_g.write_gatt_char(LED_UUID_W + VENDOR_SPECIFIC_UUID,value))  # create a task to update LEDs. 
 
-            elif current_keys_g == 13: #u
-                #Drive Command
-                raw = -1*Joystick_Y_g
-                # raw = 5
-                value = struct.pack(">i", raw)
-                if test_button and test_fitness:
-                    asyncio.create_task(client_h.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
-                else: 
-                    asyncio.create_task(client_g.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
-
+            # elif current_keys_g == 13: #u
+                
 
         current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
+
+        # Send Drive Command
+        if Time_Loop >= 50:  # tested and executes about every half-sec
+            #Drive Command
+            raw = Joystick_Y_g
+            # raw = 5
+            value = struct.pack(">i", raw)
+            if test_button and test_fitness:
+                asyncio.create_task(client_h.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
+            else: 
+                asyncio.create_task(client_g.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
+            Time_Loop = 0
+            # print("Publish Drive Command")
 
         # Update the screen on notification
         if Semaphore == 1:
