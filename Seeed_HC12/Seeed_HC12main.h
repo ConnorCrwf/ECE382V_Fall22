@@ -1,4 +1,4 @@
-// Seeed_HC12main.c
+// Seeed_HC12main.h
 // Message protocol definitions.
 // Lab 1 start project for ECE382V, Technology for Embedded IoT
 // Daniel I. Meza
