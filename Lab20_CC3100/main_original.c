@@ -1,9 +1,10 @@
 /*
- * main.c - Example project for UT.6.02x Embedded Systems - Shape the World
+ * main.c - Example project for TI-RSLK MAX
  * Jonathan Valvano and Ramesh Yerraballi
- * July 29 2021 (both weathermap and ifttt email tested 7/29/2021)
+ * August 18, 2022
  * Hardware requirements 
      MSP432 LaunchPad, switches, LEDs, debugging output to PC (UART)
+     TI-RSLK MAX negative logic bumper switches on P4.7, P4.6, P4.5, P4.3, P4.2, and P4.0
      CC3100 wifi booster and 
      an internet access point with OPEN, WPA, or WEP security
    TI CC3100 simplelink SDK v1.3.0 release 
@@ -23,7 +24,6 @@
           ..\driverlib\interrupt.c 
           ..\driverlib\fpu.c enables floating point and lazy stack
           ..\driverlib\cpu.c
-          ..\inc\SimpleLinkEventHandlers.c
  * Software requirements (MSP432 specific)
       cc3100-sdk\platform\msp432p\board.c (edited from a MSP430 version) handles 
           sets clock to 48MHz (calls ClockSystem)
@@ -50,8 +50,15 @@
           P1.2 UCA0RXD (VCP receive) 
           P1.3 UCA0TXD (VCP transmit) 
       ..\cc3100-sdk\platform\msp432p\timer_tick.c enables TimerA2 for simplelink time-stamping feature
-
-* main.c - get weather details sample application
+      ..\inc\bump.c, hardware in negative logic and software in positive logic
+          P4.7 Bump5, left side of robot
+          P4.6 Bump4
+          P4.5 Bump3
+          P4.3 Bump2
+          P4.2 Bump1
+          P4.0 Bump0, right side of robot
+       ../inc/TimerA1.c, used to run odometry in background
+* derived from main.c - get weather details sample application
  *
  * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/
  *
@@ -86,17 +93,7 @@
  *
  */
 
-/*
- * Application Name     -   Get weather
- * Application Overview -   This is a sample application demonstrating how
- *                          to connect to openweathermap.org server and request
- *                          for weather details of a city. The application\
- *                          opens a TCP socket w/ the server and sends a HTTP
- *                          Get request to get the weather details. The received
- *                          data is processed and displayed on the console
- * Application Details  -   http://processors.wiki.ti.com/index.php/CC31xx_Get_Weather_Application
- *                          doc\examples\get_weather.pdf
- */
+
 
 /* CC3100 booster pack MSP432 connections (unused pins can be used by user application)
 Pin  Signal         Direction   Pin   Signal      Direction
@@ -138,16 +135,36 @@ P3.10 P5.5 UNUSED     NA        P4.10 P3.7  UNUSED      OUT(see R75)
 #include "application_commands.h"
 #include "LaunchPad.h"
 #include <string.h>
+#include "bump.h"
+#include "clock.h"
+#include "..\inc\TimerA1.h"
+#include "..\inc\Motor.h"
+#include "..\inc\Tachometer.h"
+#include "..\inc\SSD1306.h"
+#include "..\inc\odometry.h"
+#include "..\inc\blinker.h"
+
+//enum outputtype CurrentOutputType = OLED;
+extern int32_t MyX,MyY;               // position in 0.0001cm
+extern int32_t MyTheta;               // direction units 2*pi/16384 radians (-pi to +pi)
+extern enum RobotState Action;
+
 // edit sl_common.h file with access point information
 //    you will find it in \cc3100-sdk\examples\common
-
-
-
+// MAX_SEND_BUFF_SIZE and MAX_RECV_BUFF_SIZE must greater than 200++3*MAX_VALUE_BUFF_SIZE
+#define SL_STOP_TIMEOUT        0xFF
+#define MAX_RECV_BUFF_SIZE  1024
+#define MAX_SEND_BUFF_SIZE  1024
+#define SUCCESS             0
+#define MAX_VALUE_BUFF_SIZE 256
+char Value1String[MAX_VALUE_BUFF_SIZE];
+char Value2String[MAX_VALUE_BUFF_SIZE];
+char Value3String[MAX_VALUE_BUFF_SIZE];
+int32_t DataCount;
+char LogMessage[100+3*MAX_VALUE_BUFF_SIZE];
 /* Application specific status/error codes */
-#define SL_STOP_TIMEOUT     0xFF
-
 typedef enum{
-    DEVICE_NOT_IN_STATION_MODE = -0x7D0,        // Choosing this number to avoid overlap with host-driver's error codes
+    DEVICE_NOT_IN_STATION_MODE = -0x7D0,        /* Choosing this number to avoid overlap with host-driver's error codes */
     HTTP_SEND_ERROR = DEVICE_NOT_IN_STATION_MODE - 1,
     HTTP_RECV_ERROR = HTTP_SEND_ERROR - 1,
     HTTP_INVALID_RESPONSE = HTTP_RECV_ERROR -1,
@@ -155,44 +172,17 @@ typedef enum{
     STATUS_CODE_MAX = -0xBB8
 }e_AppStatusCodes;
 
-/*
- * GLOBAL VARIABLES -- Start
- */
 _u32  g_Status = 0;
 
-/*
- * GLOBAL VARIABLES -- End
- */
 
-
-/*
- * STATIC FUNCTION PROTOTYPES -- Start
- */
 _i32 establishConnectionWithAP(void);
 _i32 disconnectFromAP(void);
 _i32 configureSimpleLinkToDefaultState(void);
-
-/*
- * STATIC FUNCTION PROTOTYPES -- End
- */
-
-#define MAX_RECV_BUFF_SIZE  1024
-#define MAX_SEND_BUFF_SIZE  512
-#define SUCCESS             0
-
-/*
- * GLOBAL VARIABLES -- Start
- */
 
 char Recvbuff[MAX_RECV_BUFF_SIZE];
 char SendBuff[MAX_SEND_BUFF_SIZE];
 unsigned long DestinationIP;
 int SockID;
-
-
-/*
- * GLOBAL VARIABLES -- End
- */
 
 void Crash(uint32_t time){
   printf(" Failed\n");
@@ -205,79 +195,163 @@ void Crash(uint32_t time){
     LaunchPad_Output(RED);
   }
 }
-/*
- * GetWeather parameters
- */
-// 1) change Austin Texas to your city
-// 2) you can change metric to imperial if you want temperature in F
-//Uncomment to perform Task 5 for Lab 3
-// #define WELCOME "\nFetching weather from openweathermap.org"
-// #define WEBPAGE "api.openweathermap.org"
-// #define REQUEST "GET /data/2.5/weather?q=Austin&APPID=89c2724538684eca055891bfb86e0994&units=metric HTTP/1.1\nHost:api.openweathermap.org\nAccept: */*\n\n"
-// 1) go to http://openweathermap.org/appid#use 
-// 2) Register on the Sign up page
-// 3) get an API key (APPID) replace the 1234567890abcdef1234567890abcdef with your APPID
-
-/*
- * IFTTT send email parameters
- */
-//Uncomment to perform Task 6 for Lab 3
-#define WELCOME "\nIFTTT trigger email"
-#define WEBPAGE "maker.ifttt.com"
-#define REQUEST "POST /trigger/button_pressed/with/key/b785zOfdG4LZ9ZZT-2UL_p HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: 68\n\n{\"value1\" : \"TI-RSLK MAX\", \"value2\" : \"Hello\", \"value3\" : \"World!\" }\n\n"
-// 1) create an account on IFTTT (record your key)
-// 2) follow directions in Lab 20 to create an IFTTT applet called button_pressed that triggers on Webhooks and then sends you email
-// 3) replace 1234567890abcdef1234567890abcdef with your
-int main(void){int32_t retVal;  
-int32_t ASize = 0; SlSockAddrIn_t  Addr;
-  initClk();           // 48 MHz
-  UART0_Initprintf();  // Send data to PC, 115200 bps
-  LaunchPad_Init();    // initialize LaunchPad I/O
-  printf(WELCOME);
-  printf("\nStarting configureSimpleLinkToDefaultState(); ...");
-  retVal = configureSimpleLinkToDefaultState();  
-  if(retVal < 0)Crash(4000000);
-  printf(" Completed\nStarting sl_Start(0, 0, 0); ...");
-  retVal = sl_Start(0, 0, 0);
-  if((retVal < 0) || (ROLE_STA != retVal) ) Crash(8000000);
-  printf(" Completed\nStarting establishConnectionWithAP(); ...");
-  retVal = establishConnectionWithAP();
-  if(retVal < 0)Crash(1000000);
-  printf(" Connected\n");
-  while(1){
-    printf("Starting sl_NetAppDnsGetHostByName(%s) ...",WEBPAGE);
-    retVal = sl_NetAppDnsGetHostByName((_i8 *)WEBPAGE,
-             strlen(WEBPAGE),&DestinationIP, SL_AF_INET);
-    if(retVal == 0){
-      printf(" Completed\nCreating a socket ...");
-      Addr.sin_family = SL_AF_INET;
-      Addr.sin_port = sl_Htons(80);
-      Addr.sin_addr.s_addr = sl_Htonl(DestinationIP);// IP to big endian 
-      ASize = sizeof(SlSockAddrIn_t);
-      SockID = sl_Socket(SL_AF_INET,SL_SOCK_STREAM, 0);
-      if( SockID >= 0 ){
-        printf(" Completed\nConnecting to this socket ...");
-        retVal = sl_Connect(SockID, ( SlSockAddr_t *)&Addr, ASize);
-      }
-      if((SockID >= 0)&&(retVal >= 0)){
-        strcpy(SendBuff,REQUEST); 
-        printf(" Completed\nSending this TCP payload to socket\n%s",SendBuff);
-        sl_Send(SockID, SendBuff, strlen(SendBuff), 0);   // Send the HTTP GET/POST
-        sl_Recv(SockID, Recvbuff, MAX_RECV_BUFF_SIZE, 0); // Receive response
-        sl_Close(SockID);
-        LaunchPad_Output(GREEN);
-        printf("Received this response from server\n%s\n",Recvbuff);
-      }else{
-        printf(" Failed\n");
-      }
-    }else{
-        printf(" Failed\n");
+int Running; // 0 means stopped
+void CheckBumper(void){
+  if(Running){
+    if(Bump_Read()){
+      Motor_Stop(); // stop on bump switch
+      Running = 0;
     }
-    printf("Push LaunchPad switch to run again\n");
-    while(LaunchPad_Input()==0){}; // wait for touch
-    LaunchPad_Output(0);
   }
 }
+uint32_t RacingStatus; // true when last goal meet
+uint32_t bWifi=0;      // true if using Wifi
+void Racing(void){
+  UpdatePosition();
+  RacingStatus = CheckGoal();
+}
+
+#define WEBPAGE "maker.ifttt.com"
+#define REQUEST "POST /trigger/log_data/with/key/b785zOfdG4LZ9ZZT-2UL_p HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
+//#define REQUEST "POST /trigger/log_data/with/key/1234567890abcdef1234567890abcdef HTTP/1.1\nHost: maker.ifttt.com\nUser-Agent: CCS/9.0.1\nConnection: close\nContent-Type: application/json\nContent-Length: "
+// 1) create an account on IFTTT (record your key)
+// 2) create an IFTTT applet called log_data that triggers on Webhooks and then adds a row to your googlesheet
+// 3) replace 1234567890abcdef1234567890abcdef with your IFTTT key
+void ClearData(void){
+  Value1String[0] = Value2String[0] = Value3String[0] = 0; // empty strings
+  DataCount = 0;
+}
+void LogData(int32_t x, int32_t y, int32_t th){
+  if(strlen(Value1String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+  if(strlen(Value2String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+  if(strlen(Value3String)>(MAX_VALUE_BUFF_SIZE-32)) return;
+  if(DataCount > 0){
+    strcat(Value1String,", "); // comma separated values
+    strcat(Value2String,", ");
+    strcat(Value3String,", ");
+  }
+  sprintf(LogMessage,"%d",x/1000); // 1 mm
+  strcat(Value1String,LogMessage);
+  sprintf(LogMessage,"%d",y/1000); // 1 mm
+  strcat(Value2String,LogMessage);
+  sprintf(LogMessage,"%d",(180*th)/8192); // 1 deg
+  strcat(Value3String,LogMessage);
+  DataCount++;
+}
+void SendData(void){int32_t retVal;
+int32_t ASize = 0; SlSockAddrIn_t  Addr; int32_t logSize;
+  LaunchPad_Output(0);
+  if(bWifi==0) return;
+  printf("Creating a socket ...");
+  Addr.sin_family = SL_AF_INET;
+  Addr.sin_port = sl_Htons(80);
+  Addr.sin_addr.s_addr = sl_Htonl(DestinationIP);// IP to big endian
+  ASize = sizeof(SlSockAddrIn_t);
+  SockID = sl_Socket(SL_AF_INET,SL_SOCK_STREAM, 0);
+  if( SockID >= 0 ){
+    printf(" Completed\nConnecting to this socket ...");
+    retVal = sl_Connect(SockID, ( SlSockAddr_t *)&Addr, ASize);
+  }
+  if((SockID >= 0)&&(retVal >= 0)){ // distances in mm
+    sprintf(LogMessage,"{\"value1\" : \"%s\", \"value2\" : \"%s\", \"value3\" : \"%s\" }",Value1String,Value2String,Value3String);
+    logSize = strlen(LogMessage);
+    sprintf(SendBuff,"%s%d\n\n%s\n\n",REQUEST,logSize,LogMessage);
+    printf(" Completed\nSending this TCP payload to socket\n%s",SendBuff);
+    sl_Send(SockID, SendBuff, strlen(SendBuff), 0);   // Send the HTTP GET
+    sl_Recv(SockID, Recvbuff, MAX_RECV_BUFF_SIZE, 0); // Receive response
+    sl_Close(SockID);
+    LaunchPad_Output(GREEN);
+    printf("Received this response from server\n%s\n",Recvbuff);
+  }else{
+    printf(" Failed\n");
+  }
+}
+
+uint32_t result;
+int main(void){int32_t retVal;
+  initClk();        // 48 MHz
+  Bump_Init();      // RSLK bump switches
+  LaunchPad_Init();      // initialize LaunchPad I/O
+
+  LaunchPad_Output(BLUE);
+  Motor_Init();
+  Motor_Stop();
+  Blinker_Init();
+  Tachometer_Init();
+  SSD1306_Init(SSD1306_SWITCHCAPVCC);
+  SSD1306_Clear(); SSD1306_SetCursor(0,0);
+  if(LaunchPad_Input()==0){
+    Odometry_SetPower(7000,3000); ///< PWM for fast motions, out of 15000
+    SSD1306_OutString("RSLK MAX, Fast");
+  }else{
+    Odometry_SetPower(4000,2000); ///< PWM for fast motions, out of 15000
+    SSD1306_OutString("RSLK MAX, Valvano");
+  }
+  SSD1306_SetCursor(0,1); SSD1306_OutString("Lab 20 Wi-Fi");
+  SSD1306_SetCursor(0,2); SSD1306_OutString("North at (0,0)");
+  if(Bump_Read()){
+    bWifi=0;
+    SSD1306_SetCursor(0,3); SSD1306_OutString("Wifi is off");
+  }else{
+    bWifi = 1;
+    UART0_Initprintf();    // Send data to PC, 115200 bps
+    printf("Lab 20 Barrel racing\nStarting configureSimpleLinkToDefaultState(); ...");
+    retVal = configureSimpleLinkToDefaultState();
+    if(retVal < 0)Crash(4000000);
+    printf(" Completed\nStarting sl_Start(0, 0, 0); ...");
+    retVal = sl_Start(0, 0, 0);
+    if((retVal < 0) || (ROLE_STA != retVal) ) Crash(8000000);
+    printf(" Completed\nStarting establishConnectionWithAP(); ...");
+    retVal = establishConnectionWithAP();
+    if(retVal < 0)Crash(1000000);
+    printf("Connected\n");
+    SSD1306_SetCursor(0,3); SSD1306_OutString("Connected");
+    printf("\nStarting sl_NetAppDnsGetHostByName(%s) ...",WEBPAGE);
+    retVal = sl_NetAppDnsGetHostByName((_i8 *)WEBPAGE,
+              strlen(WEBPAGE),&DestinationIP, SL_AF_INET);
+    if(retVal == 0){
+     printf(" Completed\n");
+    }else{
+      printf(" Failed\n");
+      bWifi = 0;
+    }
+  }
+  SSD1306_SetCursor(0,4); SSD1306_OutString("Hit bump to start"); printf("Hit bump to start\n");
+  TimerA1_Init(&Racing,20000); // every 40ms
+  /* logging test code
+  ClearData();
+  for(int32_t i=10;i<50;i=i+3){
+     LogData(i*1000,(i+1)*1000,((i+2)*8192+90)/180,ISSTOPPED);
+  }
+  SendData();
+  */
+  WaitUntilBumperTouched();
+  while(1){
+    ClearData();
+    Odometry_Init(0,0,NORTH); UpdatePosition(); // facing North
+    Display(); LogData(MyX,MyY,MyTheta);
+    ForwardUntilYStart(400000);       // 0,40 cm
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    SoftLeftUntilThStart(WEST);       // 180 or -180
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    ForwardUntilXStart(-400000);      // -40,40 cm
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    SoftLeftUntilThStart(SOUTH);      // -90
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    ForwardUntilYStart(0);            // -40,0 cm
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    SoftLeftUntilThStart(EAST);       // 0
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    ForwardUntilXStart(0);            // 0,0 cm
+    RacingStatus = 0; while(RacingStatus==0){}; LogData(MyX,MyY,MyTheta); Display();
+    SoftLeftUntilThStart(NORTH);      // 90
+    RacingStatus = 0; while(RacingStatus==0){}; Motor_Stop(); LogData(MyX,MyY,MyTheta); Display();
+    SendData();
+    StopUntilBumperTouched();
+  }
+}
+
+
 
 /*!
     \brief This function configure the SimpleLink device in its default state. It:
@@ -395,8 +469,6 @@ _i32 configureSimpleLinkToDefaultState(void){
     retVal = sl_Stop(SL_STOP_TIMEOUT);
     ASSERT_ON_ERROR(retVal);
 
-  //  retVal = initializeAppVariables();
-  //  ASSERT_ON_ERROR(retVal);
 
     return retVal; /* Success */
 }
@@ -463,6 +535,7 @@ _i32 disconnectFromAP(void){
     return SUCCESS;
 }
 
+
 /*
  * ASYNCHRONOUS EVENT HANDLERS -- Start
  */
@@ -479,12 +552,13 @@ _i32 disconnectFromAP(void){
     \warning
 */
 void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent){
-  if(pWlanEvent == NULL)
-    printf(" [WLAN EVENT] NULL Pointer Error \n\r");
-  switch(pWlanEvent->Event)    {
-    case SL_WLAN_CONNECT_EVENT:
-    {
-      SET_STATUS_BIT(g_Status, STATUS_BIT_CONNECTION);
+    if(pWlanEvent == NULL)
+        printf(" [WLAN EVENT] NULL Pointer Error \n\r");
+
+    switch(pWlanEvent->Event)    {
+        case SL_WLAN_CONNECT_EVENT:
+        {
+            SET_STATUS_BIT(g_Status, STATUS_BIT_CONNECTION);
 
             /*
              * Information about the connected AP (like name, MAC etc) will be
@@ -601,7 +675,7 @@ void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pHttpEvent,
 */
 void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent){
     /*
-     * Most of the general errors are not FATAL and are to be handled
+     * Most of the general errors are not FATAL are are to be handled
      * appropriately by the application
      */
     printf(" [GENERAL EVENT] \n\r");
@@ -654,6 +728,9 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock){
 /*
  * ASYNCHRONOUS EVENT HANDLERS -- End
  */
+
+
+
 
 
 

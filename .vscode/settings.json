@@ -1,0 +1,7 @@
+{
+	"files.associations": {
+		"*.machine": "xml",
+		"ssd1306.h": "c",
+		"opt3101.h": "c"
+	}
+}
