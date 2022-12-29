@@ -626,7 +626,7 @@ void Bluetooth_Init(void){volatile int r;
   Lab6_GetVersion(); // optional
   //this is a server, servers have services. python script is a client. they're connected. Can't connect two servers together
   Lab6_AddService(0xFFF0); 
-  //Characteristics (Values read by Client)
+  //Characteristics (Values read by Python Client)
   /*
   Lab6_AddCharacteristic(0xFFF1,2,&PlotState,0x03,0x0A,"PlotState",&Bluetooth_ReadPlotState,&Bluetooth_WritePlotState);
   Lab6_AddCharacteristic(0xFFF2,4,&Time,0x01,0x02,"Time",&Bluetooth_ReadTime,0);
@@ -635,10 +635,10 @@ void Bluetooth_Init(void){volatile int r;
   Lab6_AddCharacteristic(0xFFF5,2,&edXNum,0x02,0x08,"edXNum",0,&TExaS_Grade);
   */
   
-  //Characteristics (Values written by Client)
+  //Characteristics (Values written by Python Client)
 //  Lab6_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
 
-  // Notify Characteristics (Values subscribed to by Client based on publish rate of each task)
+  // Notify Characteristics (Values subscribed to by Python Client based on publish rate of each task)
 //  Lab6_AddNotifyCharacteristic(0xFFFA,4,&LightData,"Light",&Bluetooth_ReadLight);   // Notifcation value is sent by Task 7. Then function handles message.
   Lab6_AddNotifyCharacteristic(0xFFFB,4,&JoystickX,"JoystickX",&Bluetooth_ReadJoystickX);   // Notifcation value is sent by Task 7. Then function handles message.
   Lab6_AddNotifyCharacteristic(0xFFFC,4,&JoystickY,"JoystickY",&Bluetooth_ReadJoystickY);

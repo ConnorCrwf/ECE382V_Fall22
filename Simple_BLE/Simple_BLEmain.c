@@ -49,6 +49,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 // ******************************************************************************************
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "msp.h"
 #include "../inc/Clock.h"
 #include "../inc/CortexM.h"
@@ -71,6 +72,8 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "../inc/opt3101.h"
 // OPT3101=0 if no OPT3101, OPT3101=1 if robot has OPT3101
 #define ROBOT 1
+
+bool extra_features;
 
 uint16_t Switch1;       // 16-bit notify data from Button 1
 int32_t DriveXCmd;
@@ -200,13 +203,13 @@ void BLE_Init(uint8_t num){volatile int r;
   AP_GetVersion(); // optional
   AP_AddService(0xFFF0);  //TODO I guess it's ok to have both devices under the same service?
 
-  //Characteristics (Values written by Client)
-//  AP_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
+  //Characteristics (Values written by Python Client)
+  if(extra_features) AP_AddCharacteristic(0xFFF6,2,&LED,0x02,0x08,"LED",0,&Bluetooth_LED);
   AP_AddCharacteristic(0xFFFE,4,&DriveXCmd,0x02,0x08,"JoystickX",0,&Bluetooth_DriveCmd);
   AP_AddCharacteristic(0xFFFF,4,&DriveYCmd,0x02,0x08,"JoystickY",0,&Bluetooth_DriveCmd);
 
-  //Notify Characteristics (Publishing)
-//  AP_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
+  //Notify Characteristics (Publishing to Python Client)
+  if(extra_features) AP_AddNotifyCharacteristic(0xFFFD,2,&Switch1,"Button1",&Bluetooth_Switch1);
   AP_RegisterService();
   AP_StartAdvertisementJacki19(num);
   AP_GetStatus(); // optional
