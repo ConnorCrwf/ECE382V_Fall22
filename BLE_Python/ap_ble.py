@@ -78,8 +78,8 @@ TEMPERATURE_UUID_R = "0000fff4" # read-only characteristic for the HalfWordData 
 
 # Characteristics (Values written by Client)
 LED_UUID_W = "0000fff6" # read-only characteristic for the WordData data (LED). 
-DriveX_UUID_W = "0000fffe"
-DriveY_UUID_W = "0000ffff"
+DriveLeft_UUID_W = "0000fffe"
+DriveRight_UUID_W = "0000ffff"
 # DISTANCE_UUID_N = "0000ff7" # notify characteristic Distance that can be subscribed to to get the data.
 
 # Read Notify Characteristics
@@ -266,6 +266,10 @@ async def pygame_gui():
     Time = 0 
     Time_Loop = 0
     t = 0
+    x_value = 0
+    y_value = 0
+    driveLeft = 0
+    driveRight = 0
 
     while True: #Main loop
         #First handle key inputs
@@ -313,18 +317,25 @@ async def pygame_gui():
         current_keys_g_old = current_keys_g #retain the old values so we only transmit if something has changed
 
         # Send Drive Command
-        if Time_Loop >= 10:  # tested and executes about every half-sec
+        if Time_Loop >= 5:  # tested and executes about every half-sec
             #Drive Command
             rawX = Joystick_X_g
             rawY = Joystick_Y_g
-            # raw = 5
-            x_value = struct.pack(">i", rawX)
-            y_value = struct.pack(">i", rawY)
+            x_value = int(rawX*1.8)
+            y_value = rawY*6
+            if abs(x_value) < 150:
+                x_value = 0
+            if abs(y_value) < 150:
+                y_value = 0
+            driveLeft = y_value + x_value
+            driveRight = y_value - x_value
+            driveLeft_value_pack = struct.pack(">i", driveLeft)
+            driveRight_value_pack = struct.pack(">i", driveRight)
             if BTdevice_1 and BTdevice_2:
-                asyncio.create_task(client_h.write_gatt_char(DriveX_UUID_W + VENDOR_SPECIFIC_UUID,x_value))
-                asyncio.create_task(client_h.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,y_value))   
+                asyncio.create_task(client_h.write_gatt_char(DriveLeft_UUID_W + VENDOR_SPECIFIC_UUID,driveLeft_value_pack))
+                asyncio.create_task(client_h.write_gatt_char(DriveRight_UUID_W + VENDOR_SPECIFIC_UUID,driveRight_value_pack))   
             else: 
-                asyncio.create_task(client_g.write_gatt_char(DriveY_UUID_W + VENDOR_SPECIFIC_UUID,value))  
+                asyncio.create_task(client_g.write_gatt_char(DriveRight_UUID_W + VENDOR_SPECIFIC_UUID,value))  
             Time_Loop = 0
             # print("Publish Drive Command")
 
@@ -352,7 +363,8 @@ async def pygame_gui():
                 print ("Light =", Light_g)
                 print ("Switch =", Switch_h)
                 print ("LED value written is =", LED_g)
-            print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
+            # print ("Joystick X =", Joystick_X_g, " Joystick Y =", Joystick_Y_g)
+            print ("DriveLeft value =", driveLeft, " DriveRight value =", driveRight)
             pygame.display.update() #refresh the screen
 
         await asyncio.sleep(FRAMERATE) #sleep so the frame rate is set and created tasks can run. this is sleep time is very important
