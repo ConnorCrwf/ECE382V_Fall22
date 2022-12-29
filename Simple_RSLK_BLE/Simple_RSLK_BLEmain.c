@@ -153,6 +153,9 @@ void PrintBump(void){int i;
   }
   printf("pressed\n\r");
 }
+
+//************ BT functions ********************
+
 // printf (to PC) used for debugging
 
 //*************AP_StartAdvertisementJacki**************
@@ -276,86 +279,44 @@ SysTick_Init(48000,3); // set up SysTick for 1kHz interrupts
 BLE_Init(ROBOT);
 EnableInterrupts();
 last = LaunchPad_Input();
-while(1){
+while(Bump_Read() == 0){
   time_global++;
   AP_BackgroundProcess();  // handle incoming SNP frames
   time2 = time2 + 1;
 
   //******RSLK Startup Functions (Begin) **************
   Motor_Stop();
-    printf("\n\rTI-RSLK MAX\n\r");
-    printf("Press bump sensor to go\n\r");
-    i = 0;
-    LaunchPad_Output(RED);
-    Blinker_Output(BK_RGHT+BK_LEFT+FR_RGHT+FR_LEFT);
-    while(Bump_Read() != 0){
-       Clock_Delay1ms(10);    // delay ~0.01 sec at 48 MHz
-    }
-    while(Bump_Read() == 0){   // flash the blue LED while not touched
-      LaunchPad_Output(BLUE);
-      Blinker_Output(BK_RGHT+BK_LEFT);
-      Clock_Delay1ms(100);     // delay ~0.1 sec at 48 MHz
-      LaunchPad_Output(0x00);
-      Blinker_Output(0);
-      Clock_Delay1ms(100);     // delay ~0.1 sec at 48 MHz
-      i++;
-      if((i%10)==0){ // slow down output
-        int32_t tenths = Position%10;
-        if(tenths<0)tenths = -tenths; // absolute value
-        int32_t ones = Position/10;
-        printf("Line sensor = %d.%1d mm\n\r",ones,tenths);
+  //******RSLK Startup Functions (END)**************
+  //******RSLK Operation Functions (BEGIN)**************
+  LaunchPad_Output(GREEN);           // green LED is in bit 1
+  Motor_Forward(DriveXCmd*10, DriveXCmd*10);
+  i++;
+  if((i%25)==0){ // slow down output
+    Tachometer_Get(&LeftTach, &LeftDir, &LeftSteps, &RightTach, &RightDir, &RightSteps);
+  // (1/tach step/cycles) * (12,000,000 cycles/sec) * (60 sec/min) * (1/360 rotation/step)
+    LeftSpeed = 2000000/LeftTach;
+    RightSpeed = 2000000/RightTach;
+    // printf("Tachometer speed Left=%d, Right=%d rps\n\r",LeftSpeed,RightSpeed);
+  }
+  Clock_Delay1ms(62);              // delay ~0.062 sec at 48 MHz
+  //******RSLK Operation Functions (END)**************
+  
+  //******BT Operation Functions (BEGIN)**************
+  // the constant 177770 determines the period between notifications
+  if(extra_features) {
+    if(time2 >= 177770){         // calibration value is basically a guess to get about 1 Hz
+      time2 = 0;
+      if(AP_GetNotifyCCCD(0)){
+        Switch1 = LaunchPad_Input()&0x01;   // Button 1 the & masks everything but the 1st bit, shouldn't it be 0x02 then?
+      //      OutValue("\n\rNotify Bumpers=",JackiBumpSensor);
+        AP_SendNotification(0);
       }
-    }
-    printf("Release bump sensor\n\r");
-    while(Bump_Read() != 0){   // flash the red LED while touched
-       PrintBump();
-       LaunchPad_Output(RED);
-       Blinker_Output(BK_RGHT+BK_LEFT+FR_RGHT+FR_LEFT);
-       Clock_Delay1ms(500);    // delay ~0.5 sec at 48 MHz
-       LaunchPad_Output(0x00);
-       Blinker_Output(0);
-       Clock_Delay1ms(500);    // delay ~0.5 sec at 48 MHz
-    }
-    printf("Ready, set, ...");
-    for(i=5; i; i=i-1){    // flash the yellow LED
-      LaunchPad_Output(RED+GREEN);       // red LED is in bit 0, green LED is in bit 1
-      Blinker_Output(FR_RGHT+FR_LEFT);
-      Clock_Delay1ms(100);               // delay ~0.1 sec at 48 MHz
-      LaunchPad_Output(0x00);
-      LaunchPad_Output(0x00);
-      Clock_Delay1ms(100);               // delay ~0.1 sec at 48 MHz
-    }
-    //******RSLK Startup Functions (END)**************
-    //******RSLK Operation Functions (BEGIN)**************
-    while(Bump_Read() == 0){// repeat the control code until the robot hits the wall
-      LaunchPad_Output(GREEN);           // green LED is in bit 1
-      Motor_Forward(3000, 3000);
-      i++;
-      if((i%25)==0){ // slow down output
-        Tachometer_Get(&LeftTach, &LeftDir, &LeftSteps, &RightTach, &RightDir, &RightSteps);
-      // (1/tach step/cycles) * (12,000,000 cycles/sec) * (60 sec/min) * (1/360 rotation/step)
-        LeftSpeed = 2000000/LeftTach;
-        RightSpeed = 2000000/RightTach;
-        printf("Tachometer speed Left=%d, Right=%d rps\n\r",LeftSpeed,RightSpeed);
+      // take IR distance measurements
+      // LaunchPad_Output((i&0x01)<<2);     // toggle the blue LED
+      // print distance average
       }
-      Clock_Delay1ms(62);              // delay ~0.062 sec at 48 MHz
-      //******RSLK Operation Functions (END)**************
-
-      //******BT Operation Functions (BEGIN)**************
-      // the constant 177770 determines the period between notifications
-      if(time2 >= 177770){         // calibration value is basically a guess to get about 1 Hz
-        time2 = 0;
-        if(AP_GetNotifyCCCD(0)){
-          Switch1 = LaunchPad_Input()&0x01;   // Button 1 the & masks everything but the 1st bit, shouldn't it be 0x02 then?
-        //      OutValue("\n\rNotify Bumpers=",JackiBumpSensor);
-          AP_SendNotification(0);
-        }
-        // take IR distance measurements
-        // LaunchPad_Output((i&0x01)<<2);     // toggle the blue LED
-        // print distance average
-        }
-        //******BT Operation Functions (END)**************
-    }
+  }
+    //******BT Operation Functions (END)**************
   }
 }
 
